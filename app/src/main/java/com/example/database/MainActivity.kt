@@ -1,24 +1,34 @@
 package com.example.database
 
 import android.os.Bundle
+import android.net.Uri
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
@@ -34,6 +44,7 @@ sealed class Screen(val route: String, val title: String, val icon: ImageVector)
     object Halls : Screen("halls", "Halls", Icons.Default.LocationCity)
     object Staff : Screen("staff", "Staff", Icons.Default.Group)
     object Reports : Screen("reports", "Reports", Icons.AutoMirrored.Filled.List)
+    object RandomQuery : Screen("random_query", "SQL Console", Icons.Default.Terminal)
 }
 
 class MainActivity : ComponentActivity() {
@@ -52,9 +63,13 @@ fun StudentAppTheme(content: @Composable () -> Unit) {
     MaterialTheme(
         colorScheme = lightColorScheme(
             primary = Color(0xFF1976D2),
+            onPrimary = Color.White,
             secondary = Color(0xFF26A69A),
-            primaryContainer = Color(0xFFE3F2FD)
+            primaryContainer = Color(0xFFBBDEFB),
+            onPrimaryContainer = Color(0xFF0D47A1),
+            surfaceVariant = Color(0xFFF5F5F5)
         ),
+        typography = Typography(),
         content = content
     )
 }
@@ -67,27 +82,44 @@ fun MainContainer() {
     val scope = rememberCoroutineScope()
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route
+    val viewModel: MainViewModel = viewModel()
 
     val menuItems = listOf(
         Screen.Dashboard,
         Screen.Students,
         Screen.Halls,
         Screen.Staff,
-        Screen.Reports
+        Screen.Reports,
+        Screen.RandomQuery
     )
 
     ModalNavigationDrawer(
         drawerState = drawerState,
         drawerContent = {
             ModalDrawerSheet {
-                Spacer(modifier = Modifier.height(16.dp))
-                Text(
-                    "Accommodation Office",
-                    modifier = Modifier.padding(16.dp),
-                    style = MaterialTheme.typography.headlineSmall,
-                    fontWeight = FontWeight.Bold
-                )
-                HorizontalDivider()
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(MaterialTheme.colorScheme.primary)
+                        .padding(24.dp)
+                ) {
+                    Column {
+                        Icon(
+                            Icons.Default.HomeWork,
+                            contentDescription = null,
+                            tint = Color.White,
+                            modifier = Modifier.size(48.dp)
+                        )
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Text(
+                            "University\nAccommodation",
+                            style = MaterialTheme.typography.titleLarge,
+                            color = Color.White,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+                Spacer(modifier = Modifier.height(8.dp))
                 menuItems.forEach { item ->
                     NavigationDrawerItem(
                         icon = { Icon(item.icon, contentDescription = null) },
@@ -110,9 +142,9 @@ fun MainContainer() {
             topBar = {
                 CenterAlignedTopAppBar(
                     title = {
-                        Text(
-                            menuItems.find { it.route == currentRoute }?.title ?: "Accommodation Office"
-                        )
+                        val title = menuItems.find { it.route == currentRoute }?.title 
+                            ?: if (currentRoute?.startsWith("report_detail") == true) "Report Result" else "Details"
+                        Text(title, fontWeight = FontWeight.Bold)
                     },
                     navigationIcon = {
                         IconButton(onClick = { scope.launch { drawerState.open() } }) {
@@ -120,8 +152,9 @@ fun MainContainer() {
                         }
                     },
                     colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
-                        containerColor = MaterialTheme.colorScheme.primaryContainer,
-                        titleContentColor = MaterialTheme.colorScheme.primary
+                        containerColor = MaterialTheme.colorScheme.primary,
+                        titleContentColor = Color.White,
+                        navigationIconContentColor = Color.White
                     )
                 )
             }
@@ -129,22 +162,36 @@ fun MainContainer() {
             NavHost(
                 navController = navController,
                 startDestination = Screen.Dashboard.route,
-                modifier = Modifier.padding(padding)
+                modifier = Modifier
+                    .padding(padding)
+                    .background(MaterialTheme.colorScheme.surfaceVariant)
             ) {
-                composable(Screen.Dashboard.route) { DashboardScreen(navController) }
-                composable(Screen.Students.route) { StudentsScreen(navController) }
-                composable(Screen.Halls.route) { HallsScreen(navController) }
-                composable(Screen.Staff.route) { StaffScreen(navController) }
+                composable(Screen.Dashboard.route) { DashboardScreen(navController, viewModel) }
+                composable(Screen.Students.route) { StudentsScreen(navController, viewModel) }
+                composable(Screen.Halls.route) { HallsScreen(navController, viewModel) }
+                composable(Screen.Staff.route) { StaffScreen(navController, viewModel) }
                 composable(Screen.Reports.route) { ReportsScreen(navController) }
+                composable(Screen.RandomQuery.route) { RandomQueryScreen(viewModel) }
                 
-                // Detailed student view
                 composable(
                     "student_detail/{bannerNumber}",
                     arguments = listOf(navArgument("bannerNumber") { type = NavType.StringType })
                 ) { backStackEntry ->
                     val banner = backStackEntry.arguments?.getString("bannerNumber")
-                    // In a real app, fetch this from a ViewModel
-                    StudentDetailScreen(banner ?: "", onBack = { navController.popBackStack() })
+                    val students by viewModel.students.collectAsState()
+                    val student = students.find { it.bannerNumber == banner }
+                    student?.let {
+                        StudentDetailScreen(it, onBack = { navController.popBackStack() })
+                    }
+                }
+
+                composable(
+                    "report_detail/{reportTitle}",
+                    arguments = listOf(navArgument("reportTitle") { type = NavType.StringType })
+                ) { backStackEntry ->
+                    val encodedTitle = backStackEntry.arguments?.getString("reportTitle") ?: ""
+                    val title = Uri.decode(encodedTitle)
+                    ReportDetailScreen(title, viewModel, onBack = { navController.popBackStack() })
                 }
             }
         }
@@ -152,116 +199,496 @@ fun MainContainer() {
 }
 
 @Composable
-fun DashboardScreen(navController: NavController) {
-    Column(modifier = Modifier.padding(16.dp)) {
-        Text("Welcome to the Admin Portal", style = MaterialTheme.typography.headlineMedium)
-        Spacer(modifier = Modifier.height(16.dp))
-        
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            StatCard("Placed", "150", Modifier.weight(1f))
-            StatCard("Waiting", "45", Modifier.weight(1f))
-        }
-        
-        Spacer(modifier = Modifier.height(16.dp))
-        Text("Quick Links", style = MaterialTheme.typography.titleLarge)
-        
-        LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            item {
-                QuickLinkItem("Unpaid Invoices", Icons.Default.Warning) {
-                    // Navigate to a filtered report
-                }
-            }
-            item {
-                QuickLinkItem("Pending Inspections", Icons.Default.Build) {
-                }
-            }
-        }
-    }
-}
+fun ReportDetailScreen(reportTitle: String, viewModel: MainViewModel, onBack: () -> Unit) {
+    val results by viewModel.queryResults.collectAsState()
+    val isLoading by viewModel.isLoading.collectAsState()
+    val error by viewModel.error.collectAsState()
 
-@Composable
-fun StatCard(label: String, value: String, modifier: Modifier = Modifier) {
-    Card(modifier = modifier) {
-        Column(modifier = Modifier.padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-            Text(label, style = MaterialTheme.typography.labelMedium)
-            Text(value, style = MaterialTheme.typography.displaySmall, fontWeight = FontWeight.Bold)
+    LaunchedEffect(reportTitle) {
+        val query = when (reportTitle) {
+            "Hall Managers Report" -> "SELECT * FROM Staff WHERE position LIKE '%Manager%'"
+            "Student Lease Agreements" -> "SELECT * FROM Leases"
+            "Summer Semester Leases" -> "SELECT * FROM Leases WHERE includesSummer = 1"
+            "Unpaid Invoices List" -> "SELECT * FROM Invoices WHERE datePaid IS NULL"
+            "Apartment Inspections" -> "SELECT * FROM ApartmentInspections"
+            "Hall Occupancy" -> "SELECT hallName, COUNT(*) as Occupants FROM Leases GROUP BY hallName"
+            "Waiting List Details" -> "SELECT * FROM Students WHERE status = 'waiting'"
+            "Student Category Stats" -> "SELECT category, COUNT(*) as Count FROM Students GROUP BY category"
+            "Next-of-Kin Missing" -> "SELECT bannerNumber, firstName, lastName FROM Students WHERE bannerNumber NOT IN (SELECT bannerNumber FROM NextOfKin)"
+            "Student Adviser Info" -> "SELECT s.firstName, s.lastName, a.fullName as Adviser FROM Students s JOIN Advisers a ON s.adviserStaffNumber = a.staffNumber"
+            "Senior Staff List" -> "SELECT * FROM Staff WHERE position LIKE '%Senior%'"
+            else -> "SELECT * FROM Students LIMIT 10"
         }
+        viewModel.executeQuery(query)
     }
-}
 
-@Composable
-fun QuickLinkItem(title: String, icon: ImageVector, onClick: () -> Unit) {
-    Surface(
-        onClick = onClick,
-        shape = MaterialTheme.shapes.medium,
-        color = MaterialTheme.colorScheme.surfaceVariant
-    ) {
+    Column(modifier = Modifier.fillMaxSize().background(Color.White)) {
         Row(
-            modifier = Modifier.padding(16.dp).fillMaxWidth(),
+            modifier = Modifier.fillMaxWidth().padding(16.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Icon(icon, contentDescription = null)
-            Spacer(modifier = Modifier.width(16.dp))
-            Text(title, style = MaterialTheme.typography.bodyLarge)
-            Spacer(modifier = Modifier.weight(1f))
-            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null) // Using available icon
+            IconButton(onClick = onBack) {
+                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+            }
+            Text(reportTitle, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+        }
+
+        if (isLoading) {
+            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                CircularProgressIndicator()
+            }
+        } else if (error != null) {
+            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Text(error!!, color = Color.Red, modifier = Modifier.padding(16.dp))
+            }
+        } else {
+            LazyColumn(
+                modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+                contentPadding = PaddingValues(bottom = 16.dp)
+            ) {
+                items(results) { row ->
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(8.dp),
+                        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+                    ) {
+                        Column(modifier = Modifier.padding(12.dp)) {
+                            row.forEach { (key, value) ->
+                                Row(modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp)) {
+                                    Text(
+                                        "$key: ",
+                                        fontWeight = FontWeight.Bold,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                    Text(
+                                        value,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        modifier = Modifier.weight(2f)
+                                    )
+                                }
+                                if (row.keys.last() != key) {
+                                    HorizontalDivider(color = Color.LightGray.copy(alpha = 0.3f))
+                                }
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
 }
 
 @Composable
-fun StudentsScreen(navController: NavController) {
-    // Simple list for now, will connect to backend
-    Text("Student Management List here", modifier = Modifier.padding(16.dp))
+fun RandomQueryScreen(viewModel: MainViewModel) {
+    var queryText by remember { mutableStateOf("") }
+    val results by viewModel.queryResults.collectAsState()
+    val isLoading by viewModel.isLoading.collectAsState()
+    val error by viewModel.error.collectAsState()
+
+    Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
+        OutlinedTextField(
+            value = queryText,
+            onValueChange = { queryText = it },
+            modifier = Modifier.fillMaxWidth(),
+            label = { Text("Enter SQL Query") },
+            placeholder = { Text("e.g. SELECT * FROM Students") },
+            maxLines = 4
+        )
+        Spacer(modifier = Modifier.height(16.dp))
+        Button(
+            onClick = { viewModel.executeQuery(queryText) },
+            modifier = Modifier.fillMaxWidth(),
+            enabled = queryText.isNotBlank() && !isLoading
+        ) {
+            if (isLoading) {
+                CircularProgressIndicator(modifier = Modifier.size(24.dp), color = Color.White, strokeWidth = 2.dp)
+            } else {
+                Text("Execute Query")
+            }
+        }
+        Spacer(modifier = Modifier.height(16.dp))
+
+        if (error != null) {
+            Text(text = error!!, color = Color.Red, style = MaterialTheme.typography.bodyMedium)
+        }
+
+        Text("Results", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+        Spacer(modifier = Modifier.height(8.dp))
+
+        if (results.isEmpty() && !isLoading && error == null) {
+            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Text("No data to display", color = Color.Gray)
+            }
+        } else {
+            LazyColumn(
+                modifier = Modifier.fillMaxSize().background(Color.White).padding(8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                items(results) { row ->
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(8.dp),
+                        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+                    ) {
+                        Column(modifier = Modifier.padding(12.dp)) {
+                            row.forEach { (key, value) ->
+                                Row(modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp)) {
+                                    Text(
+                                        "$key: ",
+                                        fontWeight = FontWeight.Bold,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                    Text(
+                                        value,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        modifier = Modifier.weight(2f)
+                                    )
+                                }
+                                if (row.keys.last() != key) {
+                                    HorizontalDivider(color = Color.LightGray.copy(alpha = 0.3f))
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
 }
 
 @Composable
-fun HallsScreen(navController: NavController) {
-    Text("Halls of Residence List here", modifier = Modifier.padding(16.dp))
+fun DashboardScreen(navController: NavController, viewModel: MainViewModel) {
+    val students by viewModel.students.collectAsState()
+    val halls by viewModel.halls.collectAsState()
+    val staff by viewModel.staff.collectAsState()
+
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(16.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        item {
+            Text("Overview", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+        }
+
+        item {
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                StatCard("Students", if(students.isEmpty()) "-" else students.size.toString(), Icons.Default.People, Modifier.weight(1f))
+                StatCard("Halls", if(halls.isEmpty()) "-" else halls.size.toString(), Icons.Default.Business, Modifier.weight(1f))
+            }
+        }
+
+        item {
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                StatCard("Staff", if(staff.isEmpty()) "-" else staff.size.toString(), Icons.Default.Group, Modifier.weight(1f))
+                StatCard("Waiting", if(students.isEmpty()) "-" else students.count { it.status == "waiting" }.toString(), Icons.Default.HourglassEmpty, Modifier.weight(1f))
+            }
+        }
+
+        item {
+            Text("Quick Access", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+        }
+
+        item {
+            Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = Color.White)) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    ActionItem("View All Students", Icons.Default.Person) { navController.navigate(Screen.Students.route) }
+                    HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+                    ActionItem("Unpaid Invoices Report", Icons.Default.ReceiptLong) { navController.navigate("report_detail/${Uri.encode("Unpaid Invoices List")}") }
+                    HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+                    ActionItem("Occupancy Report", Icons.Default.BarChart) { navController.navigate("report_detail/${Uri.encode("Hall Occupancy")}") }
+                }
+            }
+        }
+    }
 }
 
 @Composable
-fun StaffScreen(navController: NavController) {
-    Text("Staff Management here", modifier = Modifier.padding(16.dp))
+fun StatCard(label: String, value: String, icon: ImageVector, modifier: Modifier = Modifier) {
+    Card(
+        modifier = modifier,
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.White)
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(32.dp))
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(value, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+            Text(label, style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+        }
+    }
+}
+
+@Composable
+fun ActionItem(title: String, icon: ImageVector, onClick: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onClick() }
+            .padding(vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.secondary, modifier = Modifier.size(24.dp))
+        Spacer(modifier = Modifier.width(16.dp))
+        Text(title, style = MaterialTheme.typography.bodyLarge)
+        Spacer(modifier = Modifier.weight(1f))
+        Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null, tint = Color.LightGray)
+    }
+}
+
+@Composable
+fun StudentsScreen(navController: NavController, viewModel: MainViewModel) {
+    val students by viewModel.students.collectAsState()
+    val isLoading by viewModel.isLoading.collectAsState()
+    var searchQuery by remember { mutableStateOf("") }
+    
+    LaunchedEffect(Unit) {
+        viewModel.fetchStudents()
+    }
+
+    val filteredStudents = students.filter { 
+        it.firstName.contains(searchQuery, ignoreCase = true) || 
+        it.lastName.contains(searchQuery, ignoreCase = true) ||
+        it.bannerNumber.contains(searchQuery)
+    }
+
+    Column(modifier = Modifier.fillMaxSize()) {
+        OutlinedTextField(
+            value = searchQuery,
+            onValueChange = { searchQuery = it },
+            modifier = Modifier.fillMaxWidth().padding(16.dp),
+            placeholder = { Text("Search Students...") },
+            leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
+            shape = CircleShape,
+            colors = TextFieldDefaults.colors(focusedContainerColor = Color.White, unfocusedContainerColor = Color.White)
+        )
+
+        if (isLoading && students.isEmpty()) {
+            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                CircularProgressIndicator()
+            }
+        } else {
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                items(filteredStudents) { student ->
+                    StudentListItem(student) { navController.navigate("student_detail/${student.bannerNumber}") }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun StudentListItem(student: Student, onClick: () -> Unit) {
+    Card(
+        modifier = Modifier.fillMaxWidth().clickable { onClick() },
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.White)
+    ) {
+        Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+            Box(
+                modifier = Modifier.size(48.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primaryContainer),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(student.firstName.take(1) + student.lastName.take(1), color = MaterialTheme.colorScheme.onPrimaryContainer, fontWeight = FontWeight.Bold)
+            }
+            Spacer(modifier = Modifier.width(16.dp))
+            Column {
+                Text("${student.firstName} ${student.lastName}", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                Text(student.bannerNumber, style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+            }
+            Spacer(modifier = Modifier.weight(1f))
+            StatusBadge(student.status)
+        }
+    }
+}
+
+@Composable
+fun StatusBadge(status: String) {
+    val color = if (status == "placed") Color(0xFF4CAF50) else Color(0xFFFF9800)
+    Surface(color = color.copy(alpha = 0.1f), shape = CircleShape, border = androidx.compose.foundation.BorderStroke(1.dp, color)) {
+        Text(status.uppercase(), modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp), color = color, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
+    }
+}
+
+@Composable
+fun HallsScreen(navController: NavController, viewModel: MainViewModel) {
+    val halls by viewModel.halls.collectAsState()
+    val isLoading by viewModel.isLoading.collectAsState()
+
+    LaunchedEffect(Unit) {
+        viewModel.fetchHalls()
+    }
+
+    if (isLoading && halls.isEmpty()) {
+        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            CircularProgressIndicator()
+        }
+    } else {
+        LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+            items(halls) { hall ->
+                Card(modifier = Modifier.fillMaxWidth(), elevation = CardDefaults.cardElevation(defaultElevation = 2.dp), colors = CardDefaults.cardColors(containerColor = Color.White)) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.LocationCity, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(hall.name, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                        }
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(hall.address, style = MaterialTheme.typography.bodyMedium, color = Color.Gray)
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Row {
+                            InfoLabel("Phone", hall.telephone)
+                            Spacer(modifier = Modifier.width(24.dp))
+                            InfoLabel("Manager ID", hall.managerStaffNumber)
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun InfoLabel(label: String, value: String) {
+    Column {
+        Text(label, style = MaterialTheme.typography.labelSmall, color = Color.Gray)
+        Text(value, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
+    }
+}
+
+@Composable
+fun StaffScreen(navController: NavController, viewModel: MainViewModel) {
+    val staff by viewModel.staff.collectAsState()
+    val isLoading by viewModel.isLoading.collectAsState()
+
+    LaunchedEffect(Unit) {
+        viewModel.fetchStaff()
+    }
+
+    if (isLoading && staff.isEmpty()) {
+        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            CircularProgressIndicator()
+        }
+    } else {
+        LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            items(staff) { member ->
+                Card(modifier = Modifier.fillMaxWidth(), elevation = CardDefaults.cardElevation(defaultElevation = 2.dp), colors = CardDefaults.cardColors(containerColor = Color.White)) {
+                    Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.AccountCircle, contentDescription = null, modifier = Modifier.size(40.dp), tint = MaterialTheme.colorScheme.primary)
+                        Spacer(modifier = Modifier.width(16.dp))
+                        Column {
+                            Text("${member.firstName} ${member.lastName}", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                            Text(member.position, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.secondary)
+                            Text(member.location, style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+                        }
+                    }
+                }
+            }
+        }
+    }
 }
 
 @Composable
 fun ReportsScreen(navController: NavController) {
     val reports = listOf(
-        "Hall Managers Report",
-        "Student Leases",
-        "Summer Semester Leases",
-        "Total Rent by Student",
-        "Unpaid Invoices",
-        "Unsatisfactory Inspections",
-        "Students in Hall",
-        "Waiting List",
-        "Student Categories",
-        "Missing Next-of-Kin",
-        "Student Advisers",
-        "Hall Rent Stats",
-        "Hall Capacities",
-        "Senior Staff"
+        "Hall Managers Report" to Icons.Default.SupervisorAccount,
+        "Student Lease Agreements" to Icons.Default.Description,
+        "Summer Semester Leases" to Icons.Default.WbSunny,
+        "Unpaid Invoices List" to Icons.Default.MoneyOff,
+        "Apartment Inspections" to Icons.Default.FactCheck,
+        "Hall Occupancy" to Icons.Default.Home,
+        "Waiting List Details" to Icons.Default.FormatListNumbered,
+        "Student Category Stats" to Icons.Default.PieChart,
+        "Next-of-Kin Missing" to Icons.Default.NoAccounts,
+        "Student Adviser Info" to Icons.Default.SupportAgent,
+        "Senior Staff List" to Icons.Default.Face
     )
 
-    LazyColumn(contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        items(reports) { report ->
+    LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        items(reports) { (title, icon) ->
             Card(
-                modifier = Modifier.fillMaxWidth().clickable { /* Navigate to specific report */ },
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)
+                modifier = Modifier.fillMaxWidth().clickable { navController.navigate("report_detail/${Uri.encode(title)}") },
+                colors = CardDefaults.cardColors(containerColor = Color.White),
+                elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
             ) {
-                Text(report, modifier = Modifier.padding(16.dp), style = MaterialTheme.typography.titleMedium)
+                Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                    Spacer(modifier = Modifier.width(16.dp))
+                    Text(title, style = MaterialTheme.typography.titleMedium)
+                    Spacer(modifier = Modifier.weight(1f))
+                    Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null, modifier = Modifier.size(24.dp), tint = Color.LightGray)
+                }
             }
         }
     }
 }
 
 @Composable
-fun StudentDetailScreen(banner: String, onBack: () -> Unit) {
-    Column(modifier = Modifier.padding(16.dp)) {
-        IconButton(onClick = onBack) {
-            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+fun StudentDetailScreen(student: Student, onBack: () -> Unit) {
+    Scaffold(
+        topBar = {
+            @OptIn(ExperimentalMaterial3Api::class)
+            TopAppBar(title = { Text("Profile Details") }, navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back") } })
         }
-        Text("Details for $banner", style = MaterialTheme.typography.headlineMedium)
+    ) { padding ->
+        Column(modifier = Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState()).padding(16.dp)) {
+            Box(modifier = Modifier.fillMaxWidth().padding(vertical = 24.dp), contentAlignment = Alignment.Center) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Box(modifier = Modifier.size(100.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primaryContainer), contentAlignment = Alignment.Center) {
+                        Text(student.firstName.take(1) + student.lastName.take(1), fontSize = 32.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onPrimaryContainer)
+                    }
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Text("${student.firstName} ${student.lastName}", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+                    Text(student.bannerNumber, style = MaterialTheme.typography.titleMedium, color = Color.Gray)
+                }
+            }
+            DetailCard("General Information") {
+                DetailRow("Email", student.email)
+                DetailRow("Phone", student.mobileNumber)
+                DetailRow("Gender", student.gender)
+                DetailRow("Nationality", student.nationality)
+            }
+            Spacer(modifier = Modifier.height(16.dp))
+            DetailCard("Academic Info") {
+                DetailRow("Major", student.major)
+                DetailRow("Category", student.category)
+                DetailRow("Status", student.status)
+            }
+            Spacer(modifier = Modifier.height(16.dp))
+            DetailCard("Address") { Text("${student.street}\n${student.city}\n${student.postcode}", style = MaterialTheme.typography.bodyLarge) }
+        }
+    }
+}
+
+@Composable
+fun DetailCard(title: String, content: @Composable () -> Unit) {
+    Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = Color.White)) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Text(title, style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
+            Spacer(modifier = Modifier.height(12.dp))
+            content()
+        }
+    }
+}
+
+@Composable
+fun DetailRow(label: String, value: String) {
+    Row(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+        Text(label, modifier = Modifier.weight(1f), color = Color.Gray)
+        Text(value, modifier = Modifier.weight(2f), fontWeight = FontWeight.Medium)
     }
 }

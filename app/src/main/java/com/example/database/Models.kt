@@ -1,5 +1,8 @@
 package com.example.database
 
+import kotlinx.serialization.Serializable
+
+@Serializable
 data class Student(
     val bannerNumber: String,
     val firstName: String,
@@ -21,6 +24,7 @@ data class Student(
     val adviserStaffNumber: String? = null
 )
 
+@Serializable
 data class Adviser(
     val staffNumber: String,
     val fullName: String,
@@ -31,6 +35,7 @@ data class Adviser(
     val roomNumber: String
 )
 
+@Serializable
 data class Hall(
     val name: String,
     val address: String,
@@ -38,6 +43,7 @@ data class Hall(
     val managerStaffNumber: String
 )
 
+@Serializable
 data class Room(
     val roomNumber: String,
     val placeNumber: String,
@@ -46,12 +52,14 @@ data class Room(
     val apartmentNumber: String? = null
 )
 
+@Serializable
 data class Apartment(
     val apartmentNumber: String,
     val address: String,
     val numBedrooms: Int
 )
 
+@Serializable
 data class Lease(
     val leaseNumber: String,
     val duration: Int, // semesters
@@ -64,6 +72,7 @@ data class Lease(
     val includesSummer: Boolean = false
 )
 
+@Serializable
 data class Invoice(
     val invoiceNumber: String,
     val leaseNumber: String,
@@ -75,6 +84,7 @@ data class Invoice(
     val secondReminderSent: String? = null
 )
 
+@Serializable
 data class Inspection(
     val staffName: String,
     val apartmentNumber: String,
@@ -83,6 +93,7 @@ data class Inspection(
     val comments: String? = null
 )
 
+@Serializable
 data class Staff(
     val staffNumber: String,
     val firstName: String,
@@ -97,6 +108,7 @@ data class Staff(
     val location: String
 )
 
+@Serializable
 data class Course(
     val courseNumber: String,
     val courseTitle: String,
@@ -107,6 +119,7 @@ data class Course(
     val departmentName: String
 )
 
+@Serializable
 data class NextOfKin(
     val bannerNumber: String,
     val name: String,
@@ -115,4 +128,15 @@ data class NextOfKin(
     val city: String,
     val postcode: String,
     val telephone: String
+)
+
+@Serializable
+data class QueryRequest(
+    val query: String
+)
+
+@Serializable
+data class QueryResponse(
+    val results: List<Map<String, String>> = emptyList(),
+    val error: String? = null
 )

@@ -35,9 +35,15 @@ class MainViewModel : ViewModel() {
     private val _error = MutableStateFlow<String?>(null)
     val error: StateFlow<String?> = _error
 
-    // State flows for main entities
+    // State flows for all 12 entities
     private val _students = MutableStateFlow<List<Student>>(emptyList())
     val students: StateFlow<List<Student>> = _students
+
+    private val _advisers = MutableStateFlow<List<Adviser>>(emptyList())
+    val advisers: StateFlow<List<Adviser>> = _advisers
+
+    private val _courses = MutableStateFlow<List<Course>>(emptyList())
+    val courses: StateFlow<List<Course>> = _courses
 
     private val _staff = MutableStateFlow<List<Staff>>(emptyList())
     val staff: StateFlow<List<Staff>> = _staff
@@ -45,45 +51,54 @@ class MainViewModel : ViewModel() {
     private val _halls = MutableStateFlow<List<Hall>>(emptyList())
     val halls: StateFlow<List<Hall>> = _halls
 
-    fun fetchStudents() {
-        if (_students.value.isNotEmpty()) return
-        viewModelScope.launch {
-            _isLoading.value = true
-            _error.value = null
-            try {
-                _students.value = client.get("$baseUrl/students").body()
-            } catch (e: Exception) {
-                _error.value = "Students Error: ${e.localizedMessage}"
-            } finally {
-                _isLoading.value = false
-            }
-        }
-    }
+    private val _hallRooms = MutableStateFlow<List<Room>>(emptyList())
+    val hallRooms: StateFlow<List<Room>> = _hallRooms
 
-    fun fetchStaff() {
-        if (_staff.value.isNotEmpty()) return
-        viewModelScope.launch {
-            _isLoading.value = true
-            _error.value = null
-            try {
-                _staff.value = client.get("$baseUrl/staff").body()
-            } catch (e: Exception) {
-                _error.value = "Staff Error: ${e.localizedMessage}"
-            } finally {
-                _isLoading.value = false
-            }
-        }
-    }
+    private val _apartments = MutableStateFlow<List<Apartment>>(emptyList())
+    val apartments: StateFlow<List<Apartment>> = _apartments
 
-    fun fetchHalls() {
-        if (_halls.value.isNotEmpty()) return
+    private val _apartmentRooms = MutableStateFlow<List<Room>>(emptyList())
+    val apartmentRooms: StateFlow<List<Room>> = _apartmentRooms
+
+    private val _leases = MutableStateFlow<List<Lease>>(emptyList())
+    val leases: StateFlow<List<Lease>> = _leases
+
+    private val _invoices = MutableStateFlow<List<Invoice>>(emptyList())
+    val invoices: StateFlow<List<Invoice>> = _invoices
+
+    private val _inspections = MutableStateFlow<List<Inspection>>(emptyList())
+    val inspections: StateFlow<List<Inspection>> = _inspections
+
+    private val _kin = MutableStateFlow<List<NextOfKin>>(emptyList())
+    val kin: StateFlow<List<NextOfKin>> = _kin
+
+    // On-demand fetch methods
+    fun fetchStudents() = fetchData<List<Student>>("/students") { _students.value = it }
+    fun fetchAdvisers() = fetchData<List<Adviser>>("/advisers") { _advisers.value = it }
+    fun fetchCourses() = fetchData<List<Course>>("/courses") { _courses.value = it }
+    fun fetchStaff() = fetchData<List<Staff>>("/staff") { _staff.value = it }
+    fun fetchHalls() = fetchData<List<Hall>>("/halls") { _halls.value = it }
+    fun fetchHallRooms() = fetchData<List<Room>>("/hallrooms") { _hallRooms.value = it }
+    fun fetchApartments() = fetchData<List<Apartment>>("/apartments") { _apartments.value = it }
+    fun fetchApartmentRooms() = fetchData<List<Room>>("/apartmentrooms") { _apartmentRooms.value = it }
+    fun fetchLeases() = fetchData<List<Lease>>("/leases") { _leases.value = it }
+    fun fetchInvoices() = fetchData<List<Invoice>>("/invoices") { _invoices.value = it }
+    fun fetchInspections() = fetchData<List<Inspection>>("/inspections") { _inspections.value = it }
+    fun fetchKin() = fetchData<List<NextOfKin>>("/kin") { _kin.value = it }
+
+    private inline fun <reified T> fetchData(endpoint: String, crossinline onSuccess: (T) -> Unit) {
         viewModelScope.launch {
             _isLoading.value = true
             _error.value = null
             try {
-                _halls.value = client.get("$baseUrl/halls").body()
+                val response = client.get(baseUrl + endpoint)
+                if (response.status == HttpStatusCode.OK) {
+                    onSuccess(response.body())
+                } else {
+                    _error.value = "Server error: ${response.status}"
+                }
             } catch (e: Exception) {
-                _error.value = "Halls Error: ${e.localizedMessage}"
+                _error.value = "Network error: ${e.localizedMessage}"
             } finally {
                 _isLoading.value = false
             }

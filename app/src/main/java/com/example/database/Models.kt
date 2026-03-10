@@ -1,133 +1,134 @@
 package com.example.database
 
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.SerialName
 
 @Serializable
 data class Student(
-    val bannerNumber: String,
-    val firstName: String,
-    val lastName: String,
-    val street: String,
-    val city: String,
-    val postcode: String,
-    val mobileNumber: String,
-    val email: String,
-    val dateOfBirth: String,
-    val gender: String,
-    val category: String, // e.g., first-year undergraduate
-    val nationality: String,
-    val specialNeeds: String? = null,
+    @SerialName("banner_number") val bannerNumber: String = "",
+    @SerialName("first_name") val firstName: String = "",
+    @SerialName("last_name") val lastName: String = "",
+    val street: String? = null,
+    val city: String? = null,
+    val postcode: String? = null,
+    @SerialName("mobile_number") val mobileNumber: String? = null,
+    val email: String? = null,
+    @SerialName("date_of_birth") val dateOfBirth: String? = null,
+    val gender: String? = null,
+    val category: String? = null,
+    val nationality: String? = null,
+    @SerialName("special_needs") val specialNeeds: String? = null,
     val comments: String? = null,
-    val status: String, // placed/waiting
-    val major: String,
+    val status: String = "",
+    val major: String? = null,
     val minor: String? = null,
-    val adviserStaffNumber: String? = null
+    @SerialName("adviser_staff_number") val adviserStaffNumber: String? = null
 )
 
 @Serializable
 data class Adviser(
-    val staffNumber: String,
-    val fullName: String,
-    val position: String,
-    val department: String,
-    val internalPhone: String,
-    val email: String,
-    val roomNumber: String
+    @SerialName("staff_number") val staffNumber: String = "",
+    @SerialName("full_name") val fullName: String = "",
+    val position: String? = null,
+    val department: String? = null,
+    @SerialName("internal_phone") val internalPhone: String? = null,
+    val email: String? = null,
+    @SerialName("room_number") val roomNumber: String? = null
 )
 
 @Serializable
 data class Hall(
-    val name: String,
-    val address: String,
-    val telephone: String,
-    val managerStaffNumber: String
+    val name: String = "",
+    val address: String? = null,
+    val telephone: String? = null,
+    @SerialName("manager_staff_number") val managerStaffNumber: String? = null
 )
 
 @Serializable
 data class Room(
-    val roomNumber: String,
-    val placeNumber: String,
-    val monthlyRent: Double,
-    val hallName: String? = null,
-    val apartmentNumber: String? = null
+    @SerialName("room_number") val roomNumber: String = "",
+    @SerialName("place_number") val placeNumber: String = "",
+    @SerialName("monthly_rent") val monthlyRent: Double = 0.0,
+    @SerialName("hall_name") val hallName: String? = null,
+    @SerialName("apartment_number") val apartmentNumber: String? = null
 )
 
 @Serializable
 data class Apartment(
-    val apartmentNumber: String,
-    val address: String,
-    val numBedrooms: Int
+    @SerialName("apartment_number") val apartmentNumber: String = "",
+    val address: String? = null,
+    @SerialName("num_bedrooms") val numBedrooms: Int? = null
 )
 
 @Serializable
 data class Lease(
-    val leaseNumber: String,
-    val duration: Int, // semesters
-    val bannerNumber: String,
-    val placeNumber: String,
-    val roomNumber: String,
-    val address: String,
-    val enterDate: String,
-    val leaveDate: String? = null,
-    val includesSummer: Boolean = false
+    @SerialName("lease_number") val leaseNumber: String = "",
+    val duration: Int? = null,
+    @SerialName("banner_number") val bannerNumber: String = "",
+    @SerialName("place_number") val placeNumber: String? = null,
+    @SerialName("room_number") val roomNumber: String? = null,
+    val address: String? = null,
+    @SerialName("enter_date") val enterDate: String? = null,
+    @SerialName("leave_date") val leaveDate: String? = null,
+    @SerialName("includes_summer") val includesSummer: Int = 0 
 )
 
 @Serializable
 data class Invoice(
-    val invoiceNumber: String,
-    val leaseNumber: String,
-    val semester: Int,
-    val paymentDue: Double,
-    val datePaid: String? = null,
-    val paymentMethod: String? = null,
-    val firstReminderSent: String? = null,
-    val secondReminderSent: String? = null
+    @SerialName("invoice_number") val invoiceNumber: String = "",
+    @SerialName("lease_number") val leaseNumber: String = "",
+    val semester: Int? = null,
+    @SerialName("payment_due") val paymentDue: Double? = null,
+    @SerialName("date_paid") val datePaid: String? = null,
+    @SerialName("payment_method") val paymentMethod: String? = null,
+    @SerialName("first_reminder_sent") val firstReminderSent: String? = null,
+    @SerialName("second_reminder_sent") val secondReminderSent: String? = null
 )
 
 @Serializable
 data class Inspection(
-    val staffName: String,
-    val apartmentNumber: String,
-    val date: String,
-    val isSatisfactory: Boolean,
+    @SerialName("staff_name") val staffName: String? = null,
+    @SerialName("apartment_number") val apartmentNumber: String? = null,
+    val date: String? = null,
+    @SerialName("is_satisfactory") val isSatisfactory: Int = 1,
     val comments: String? = null
 )
 
 @Serializable
 data class Staff(
-    val staffNumber: String,
-    val firstName: String,
-    val lastName: String,
-    val email: String,
-    val street: String,
-    val city: String,
-    val postcode: String,
-    val dateOfBirth: String,
-    val gender: String,
-    val position: String,
-    val location: String
+    @SerialName("staff_number") val staffNumber: String = "",
+    @SerialName("first_name") val firstName: String = "",
+    @SerialName("last_name") val lastName: String = "",
+    val email: String? = null,
+    val street: String? = null,
+    val city: String? = null,
+    val postcode: String? = null,
+    @SerialName("date_of_birth") val dateOfBirth: String? = null,
+    val gender: String? = null,
+    val position: String? = null,
+    val location: String? = null
 )
 
 @Serializable
 data class Course(
-    val courseNumber: String,
-    val courseTitle: String,
-    val instructorName: String,
-    val instructorPhone: String,
-    val instructorEmail: String,
-    val instructorRoom: String,
-    val departmentName: String
+    @SerialName("course_number") val courseNumber: String = "",
+    @SerialName("course_title") val courseTitle: String = "",
+    @SerialName("instructor_name") val instructorName: String? = null,
+    @SerialName("instructor_phone") val instructorPhone: String? = null,
+    @SerialName("instructor_email") val instructorEmail: String? = null,
+    @SerialName("instructor_room") val instructorRoom: String? = null,
+    @SerialName("department_name") val departmentName: String? = null
 )
 
 @Serializable
 data class NextOfKin(
-    val bannerNumber: String,
-    val name: String,
-    val relationship: String,
-    val street: String,
-    val city: String,
-    val postcode: String,
-    val telephone: String
+    @SerialName("banner_number") val bannerNumber: String = "",
+    val name: String? = null,
+    val relationship: String? = null,
+    val street: String? = null,
+    val city: String? = null,
+    val postcode: String? = null,
+    val telephone: String? = null
 )
 
 @Serializable

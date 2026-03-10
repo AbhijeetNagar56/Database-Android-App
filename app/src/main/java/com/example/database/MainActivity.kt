@@ -17,6 +17,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.filled.List
+import androidx.compose.material.icons.automirrored.filled.ReceiptLong
+import androidx.compose.material.icons.automirrored.filled.FactCheck
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -43,6 +45,8 @@ sealed class Screen(val route: String, val title: String, val icon: ImageVector)
     object Students : Screen("students", "Students", Icons.Default.Person)
     object Halls : Screen("halls", "Halls", Icons.Default.LocationCity)
     object Staff : Screen("staff", "Staff", Icons.Default.Group)
+    object Advisers : Screen("advisers", "Advisers", Icons.Default.SupportAgent)
+    object Courses : Screen("courses", "Courses", Icons.Default.School)
     object Reports : Screen("reports", "Reports", Icons.AutoMirrored.Filled.List)
     object RandomQuery : Screen("random_query", "SQL Console", Icons.Default.Terminal)
 }
@@ -89,6 +93,8 @@ fun MainContainer() {
         Screen.Students,
         Screen.Halls,
         Screen.Staff,
+        Screen.Advisers,
+        Screen.Courses,
         Screen.Reports,
         Screen.RandomQuery
     )
@@ -170,6 +176,8 @@ fun MainContainer() {
                 composable(Screen.Students.route) { StudentsScreen(navController, viewModel) }
                 composable(Screen.Halls.route) { HallsScreen(navController, viewModel) }
                 composable(Screen.Staff.route) { StaffScreen(navController, viewModel) }
+                composable(Screen.Advisers.route) { AdvisersScreen(viewModel) }
+                composable(Screen.Courses.route) { CoursesScreen(viewModel) }
                 composable(Screen.Reports.route) { ReportsScreen(navController) }
                 composable(Screen.RandomQuery.route) { RandomQueryScreen(viewModel) }
                 
@@ -199,175 +207,16 @@ fun MainContainer() {
 }
 
 @Composable
-fun ReportDetailScreen(reportTitle: String, viewModel: MainViewModel, onBack: () -> Unit) {
-    val results by viewModel.queryResults.collectAsState()
-    val isLoading by viewModel.isLoading.collectAsState()
-    val error by viewModel.error.collectAsState()
-
-    LaunchedEffect(reportTitle) {
-        val query = when (reportTitle) {
-            "Hall Managers Report" -> "SELECT * FROM Staff WHERE position LIKE '%Manager%'"
-            "Student Lease Agreements" -> "SELECT * FROM Leases"
-            "Summer Semester Leases" -> "SELECT * FROM Leases WHERE includesSummer = 1"
-            "Unpaid Invoices List" -> "SELECT * FROM Invoices WHERE datePaid IS NULL"
-            "Apartment Inspections" -> "SELECT * FROM ApartmentInspections"
-            "Hall Occupancy" -> "SELECT hallName, COUNT(*) as Occupants FROM Leases GROUP BY hallName"
-            "Waiting List Details" -> "SELECT * FROM Students WHERE status = 'waiting'"
-            "Student Category Stats" -> "SELECT category, COUNT(*) as Count FROM Students GROUP BY category"
-            "Next-of-Kin Missing" -> "SELECT bannerNumber, firstName, lastName FROM Students WHERE bannerNumber NOT IN (SELECT bannerNumber FROM NextOfKin)"
-            "Student Adviser Info" -> "SELECT s.firstName, s.lastName, a.fullName as Adviser FROM Students s JOIN Advisers a ON s.adviserStaffNumber = a.staffNumber"
-            "Senior Staff List" -> "SELECT * FROM Staff WHERE position LIKE '%Senior%'"
-            else -> "SELECT * FROM Students LIMIT 10"
-        }
-        viewModel.executeQuery(query)
-    }
-
-    Column(modifier = Modifier.fillMaxSize().background(Color.White)) {
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            IconButton(onClick = onBack) {
-                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
-            }
-            Text(reportTitle, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-        }
-
-        if (isLoading) {
-            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator()
-            }
-        } else if (error != null) {
-            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text(error!!, color = Color.Red, modifier = Modifier.padding(16.dp))
-            }
-        } else {
-            LazyColumn(
-                modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-                contentPadding = PaddingValues(bottom = 16.dp)
-            ) {
-                items(results) { row ->
-                    Card(
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(8.dp),
-                        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
-                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
-                    ) {
-                        Column(modifier = Modifier.padding(12.dp)) {
-                            row.forEach { (key, value) ->
-                                Row(modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp)) {
-                                    Text(
-                                        "$key: ",
-                                        fontWeight = FontWeight.Bold,
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.primary,
-                                        modifier = Modifier.weight(1f)
-                                    )
-                                    Text(
-                                        value,
-                                        style = MaterialTheme.typography.bodySmall,
-                                        modifier = Modifier.weight(2f)
-                                    )
-                                }
-                                if (row.keys.last() != key) {
-                                    HorizontalDivider(color = Color.LightGray.copy(alpha = 0.3f))
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-fun RandomQueryScreen(viewModel: MainViewModel) {
-    var queryText by remember { mutableStateOf("") }
-    val results by viewModel.queryResults.collectAsState()
-    val isLoading by viewModel.isLoading.collectAsState()
-    val error by viewModel.error.collectAsState()
-
-    Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
-        OutlinedTextField(
-            value = queryText,
-            onValueChange = { queryText = it },
-            modifier = Modifier.fillMaxWidth(),
-            label = { Text("Enter SQL Query") },
-            placeholder = { Text("e.g. SELECT * FROM Students") },
-            maxLines = 4
-        )
-        Spacer(modifier = Modifier.height(16.dp))
-        Button(
-            onClick = { viewModel.executeQuery(queryText) },
-            modifier = Modifier.fillMaxWidth(),
-            enabled = queryText.isNotBlank() && !isLoading
-        ) {
-            if (isLoading) {
-                CircularProgressIndicator(modifier = Modifier.size(24.dp), color = Color.White, strokeWidth = 2.dp)
-            } else {
-                Text("Execute Query")
-            }
-        }
-        Spacer(modifier = Modifier.height(16.dp))
-
-        if (error != null) {
-            Text(text = error!!, color = Color.Red, style = MaterialTheme.typography.bodyMedium)
-        }
-
-        Text("Results", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-        Spacer(modifier = Modifier.height(8.dp))
-
-        if (results.isEmpty() && !isLoading && error == null) {
-            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text("No data to display", color = Color.Gray)
-            }
-        } else {
-            LazyColumn(
-                modifier = Modifier.fillMaxSize().background(Color.White).padding(8.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                items(results) { row ->
-                    Card(
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(8.dp),
-                        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
-                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
-                    ) {
-                        Column(modifier = Modifier.padding(12.dp)) {
-                            row.forEach { (key, value) ->
-                                Row(modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp)) {
-                                    Text(
-                                        "$key: ",
-                                        fontWeight = FontWeight.Bold,
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.primary,
-                                        modifier = Modifier.weight(1f)
-                                    )
-                                    Text(
-                                        value,
-                                        style = MaterialTheme.typography.bodySmall,
-                                        modifier = Modifier.weight(2f)
-                                    )
-                                }
-                                if (row.keys.last() != key) {
-                                    HorizontalDivider(color = Color.LightGray.copy(alpha = 0.3f))
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
 fun DashboardScreen(navController: NavController, viewModel: MainViewModel) {
     val students by viewModel.students.collectAsState()
     val halls by viewModel.halls.collectAsState()
     val staff by viewModel.staff.collectAsState()
+
+    LaunchedEffect(Unit) {
+        viewModel.fetchStudents()
+        viewModel.fetchHalls()
+        viewModel.fetchStaff()
+    }
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -401,7 +250,7 @@ fun DashboardScreen(navController: NavController, viewModel: MainViewModel) {
                 Column(modifier = Modifier.padding(16.dp)) {
                     ActionItem("View All Students", Icons.Default.Person) { navController.navigate(Screen.Students.route) }
                     HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
-                    ActionItem("Unpaid Invoices Report", Icons.Default.ReceiptLong) { navController.navigate("report_detail/${Uri.encode("Unpaid Invoices List")}") }
+                    ActionItem("Unpaid Invoices Report", Icons.AutoMirrored.Filled.ReceiptLong) { navController.navigate("report_detail/${Uri.encode("Unpaid Invoices List")}") }
                     HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
                     ActionItem("Occupancy Report", Icons.Default.BarChart) { navController.navigate("report_detail/${Uri.encode("Hall Occupancy")}") }
                 }
@@ -411,50 +260,12 @@ fun DashboardScreen(navController: NavController, viewModel: MainViewModel) {
 }
 
 @Composable
-fun StatCard(label: String, value: String, icon: ImageVector, modifier: Modifier = Modifier) {
-    Card(
-        modifier = modifier,
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
-        colors = CardDefaults.cardColors(containerColor = Color.White)
-    ) {
-        Column(
-            modifier = Modifier.padding(16.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(32.dp))
-            Spacer(modifier = Modifier.height(8.dp))
-            Text(value, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
-            Text(label, style = MaterialTheme.typography.bodySmall, color = Color.Gray)
-        }
-    }
-}
-
-@Composable
-fun ActionItem(title: String, icon: ImageVector, onClick: () -> Unit) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable { onClick() }
-            .padding(vertical = 4.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.secondary, modifier = Modifier.size(24.dp))
-        Spacer(modifier = Modifier.width(16.dp))
-        Text(title, style = MaterialTheme.typography.bodyLarge)
-        Spacer(modifier = Modifier.weight(1f))
-        Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null, tint = Color.LightGray)
-    }
-}
-
-@Composable
 fun StudentsScreen(navController: NavController, viewModel: MainViewModel) {
     val students by viewModel.students.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
     var searchQuery by remember { mutableStateOf("") }
     
-    LaunchedEffect(Unit) {
-        viewModel.fetchStudents()
-    }
+    LaunchedEffect(Unit) { viewModel.fetchStudents() }
 
     val filteredStudents = students.filter { 
         it.firstName.contains(searchQuery, ignoreCase = true) || 
@@ -474,15 +285,9 @@ fun StudentsScreen(navController: NavController, viewModel: MainViewModel) {
         )
 
         if (isLoading && students.isEmpty()) {
-            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator()
-            }
+            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
         } else {
-            LazyColumn(
-                modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(16.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
+            LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 items(filteredStudents) { student ->
                     StudentListItem(student) { navController.navigate("student_detail/${student.bannerNumber}") }
                 }
@@ -492,51 +297,14 @@ fun StudentsScreen(navController: NavController, viewModel: MainViewModel) {
 }
 
 @Composable
-fun StudentListItem(student: Student, onClick: () -> Unit) {
-    Card(
-        modifier = Modifier.fillMaxWidth().clickable { onClick() },
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
-        colors = CardDefaults.cardColors(containerColor = Color.White)
-    ) {
-        Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-            Box(
-                modifier = Modifier.size(48.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primaryContainer),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(student.firstName.take(1) + student.lastName.take(1), color = MaterialTheme.colorScheme.onPrimaryContainer, fontWeight = FontWeight.Bold)
-            }
-            Spacer(modifier = Modifier.width(16.dp))
-            Column {
-                Text("${student.firstName} ${student.lastName}", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                Text(student.bannerNumber, style = MaterialTheme.typography.bodySmall, color = Color.Gray)
-            }
-            Spacer(modifier = Modifier.weight(1f))
-            StatusBadge(student.status)
-        }
-    }
-}
-
-@Composable
-fun StatusBadge(status: String) {
-    val color = if (status == "placed") Color(0xFF4CAF50) else Color(0xFFFF9800)
-    Surface(color = color.copy(alpha = 0.1f), shape = CircleShape, border = androidx.compose.foundation.BorderStroke(1.dp, color)) {
-        Text(status.uppercase(), modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp), color = color, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
-    }
-}
-
-@Composable
 fun HallsScreen(navController: NavController, viewModel: MainViewModel) {
     val halls by viewModel.halls.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
 
-    LaunchedEffect(Unit) {
-        viewModel.fetchHalls()
-    }
+    LaunchedEffect(Unit) { viewModel.fetchHalls() }
 
     if (isLoading && halls.isEmpty()) {
-        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            CircularProgressIndicator()
-        }
+        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
     } else {
         LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
             items(halls) { hall ->
@@ -548,12 +316,12 @@ fun HallsScreen(navController: NavController, viewModel: MainViewModel) {
                             Text(hall.name, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
                         }
                         Spacer(modifier = Modifier.height(8.dp))
-                        Text(hall.address, style = MaterialTheme.typography.bodyMedium, color = Color.Gray)
+                        Text(hall.address ?: "", style = MaterialTheme.typography.bodyMedium, color = Color.Gray)
                         Spacer(modifier = Modifier.height(12.dp))
                         Row {
-                            InfoLabel("Phone", hall.telephone)
+                            InfoLabel("Phone", hall.telephone ?: "")
                             Spacer(modifier = Modifier.width(24.dp))
-                            InfoLabel("Manager ID", hall.managerStaffNumber)
+                            InfoLabel("Manager ID", hall.managerStaffNumber ?: "")
                         }
                     }
                 }
@@ -563,26 +331,14 @@ fun HallsScreen(navController: NavController, viewModel: MainViewModel) {
 }
 
 @Composable
-fun InfoLabel(label: String, value: String) {
-    Column {
-        Text(label, style = MaterialTheme.typography.labelSmall, color = Color.Gray)
-        Text(value, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
-    }
-}
-
-@Composable
 fun StaffScreen(navController: NavController, viewModel: MainViewModel) {
     val staff by viewModel.staff.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
 
-    LaunchedEffect(Unit) {
-        viewModel.fetchStaff()
-    }
+    LaunchedEffect(Unit) { viewModel.fetchStaff() }
 
     if (isLoading && staff.isEmpty()) {
-        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            CircularProgressIndicator()
-        }
+        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
     } else {
         LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             items(staff) { member ->
@@ -592,9 +348,65 @@ fun StaffScreen(navController: NavController, viewModel: MainViewModel) {
                         Spacer(modifier = Modifier.width(16.dp))
                         Column {
                             Text("${member.firstName} ${member.lastName}", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                            Text(member.position, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.secondary)
-                            Text(member.location, style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+                            Text(member.position ?: "", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.secondary)
+                            Text(member.location ?: "", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
                         }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun AdvisersScreen(viewModel: MainViewModel) {
+    val advisers by viewModel.advisers.collectAsState()
+    val isLoading by viewModel.isLoading.collectAsState()
+
+    LaunchedEffect(Unit) { viewModel.fetchAdvisers() }
+
+    if (isLoading && advisers.isEmpty()) {
+        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
+    } else {
+        LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            items(advisers) { adviser ->
+                Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = Color.White)) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Text(adviser.fullName, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                        Text(adviser.position ?: "", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
+                        Text(adviser.department ?: "", style = MaterialTheme.typography.bodySmall)
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Row {
+                            InfoLabel("Phone", adviser.internalPhone ?: "")
+                            Spacer(modifier = Modifier.width(24.dp))
+                            InfoLabel("Room", adviser.roomNumber ?: "")
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun CoursesScreen(viewModel: MainViewModel) {
+    val courses by viewModel.courses.collectAsState()
+    val isLoading by viewModel.isLoading.collectAsState()
+
+    LaunchedEffect(Unit) { viewModel.fetchCourses() }
+
+    if (isLoading && courses.isEmpty()) {
+        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
+    } else {
+        LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            items(courses) { course ->
+                Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = Color.White)) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Text(course.courseTitle, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                        Text(course.courseNumber, style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text("Instructor: ${course.instructorName ?: ""}", style = MaterialTheme.typography.bodyMedium)
+                        Text("Dept: ${course.departmentName ?: ""}", style = MaterialTheme.typography.bodySmall)
                     }
                 }
             }
@@ -608,8 +420,8 @@ fun ReportsScreen(navController: NavController) {
         "Hall Managers Report" to Icons.Default.SupervisorAccount,
         "Student Lease Agreements" to Icons.Default.Description,
         "Summer Semester Leases" to Icons.Default.WbSunny,
-        "Unpaid Invoices List" to Icons.Default.MoneyOff,
-        "Apartment Inspections" to Icons.Default.FactCheck,
+        "Unpaid Invoices List" to Icons.AutoMirrored.Filled.ReceiptLong,
+        "Apartment Inspections" to Icons.AutoMirrored.Filled.FactCheck,
         "Hall Occupancy" to Icons.Default.Home,
         "Waiting List Details" to Icons.Default.FormatListNumbered,
         "Student Category Stats" to Icons.Default.PieChart,
@@ -638,13 +450,157 @@ fun ReportsScreen(navController: NavController) {
 }
 
 @Composable
-fun StudentDetailScreen(student: Student, onBack: () -> Unit) {
-    Scaffold(
-        topBar = {
-            @OptIn(ExperimentalMaterial3Api::class)
-            TopAppBar(title = { Text("Profile Details") }, navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back") } })
+fun ReportDetailScreen(reportTitle: String, viewModel: MainViewModel, onBack: () -> Unit) {
+    val results by viewModel.queryResults.collectAsState()
+    val isLoading by viewModel.isLoading.collectAsState()
+    val error by viewModel.error.collectAsState()
+
+    LaunchedEffect(reportTitle) {
+        val query = when (reportTitle) {
+            "Hall Managers Report" -> "SELECT * FROM Staff WHERE position LIKE '%Manager%'"
+            "Student Lease Agreements" -> "SELECT * FROM Leases"
+            "Summer Semester Leases" -> "SELECT * FROM Leases WHERE includes_summer = 1"
+            "Unpaid Invoices List" -> "SELECT * FROM Invoices WHERE date_paid IS NULL"
+            "Apartment Inspections" -> "SELECT * FROM Inspections"
+            "Hall Occupancy" -> "SELECT hall_name, COUNT(*) as Occupants FROM Leases GROUP BY hall_name"
+            "Waiting List Details" -> "SELECT * FROM Students WHERE status = 'waiting'"
+            "Student Category Stats" -> "SELECT category, COUNT(*) as Count FROM Students GROUP BY category"
+            "Next-of-Kin Missing" -> "SELECT banner_number, first_name, last_name FROM Students WHERE banner_number NOT IN (SELECT banner_number FROM Kin)"
+            "Student Adviser Info" -> "SELECT s.first_name, s.last_name, a.full_name as Adviser FROM Students s JOIN Advisers a ON s.adviser_staff_number = a.staff_number"
+            "Senior Staff List" -> "SELECT * FROM Staff WHERE position LIKE '%Senior%'"
+            else -> "SELECT * FROM Students LIMIT 10"
         }
-    ) { padding ->
+        viewModel.executeQuery(query)
+    }
+
+    Column(modifier = Modifier.fillMaxSize().background(Color.White)) {
+        Row(modifier = Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+            IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back") }
+            Text(reportTitle, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+        }
+
+        if (isLoading) {
+            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
+        } else if (error != null) {
+            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text(error!!, color = Color.Red, modifier = Modifier.padding(16.dp)) }
+        } else {
+            LazyColumn(modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(8.dp), contentPadding = PaddingValues(bottom = 16.dp)) {
+                items(results) { row ->
+                    Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(8.dp), elevation = CardDefaults.cardElevation(defaultElevation = 2.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
+                        Column(modifier = Modifier.padding(12.dp)) {
+                            row.forEach { (key, value) ->
+                                Row(modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp)) {
+                                    Text("$key: ", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary, modifier = Modifier.weight(1f))
+                                    Text(value, style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(2f))
+                                }
+                                if (row.keys.last() != key) { HorizontalDivider(color = Color.LightGray.copy(alpha = 0.3f)) }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun RandomQueryScreen(viewModel: MainViewModel) {
+    var queryText by remember { mutableStateOf("") }
+    val results by viewModel.queryResults.collectAsState()
+    val isLoading by viewModel.isLoading.collectAsState()
+    val error by viewModel.error.collectAsState()
+
+    Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
+        OutlinedTextField(value = queryText, onValueChange = { queryText = it }, modifier = Modifier.fillMaxWidth(), label = { Text("Enter SQL Query") }, placeholder = { Text("e.g. SELECT * FROM Students") }, maxLines = 4)
+        Spacer(modifier = Modifier.height(16.dp))
+        Button(onClick = { viewModel.executeQuery(queryText) }, modifier = Modifier.fillMaxWidth(), enabled = queryText.isNotBlank() && !isLoading) {
+            if (isLoading) CircularProgressIndicator(modifier = Modifier.size(24.dp), color = Color.White, strokeWidth = 2.dp) else Text("Execute Query")
+        }
+        Spacer(modifier = Modifier.height(16.dp))
+        if (error != null) { Text(text = error!!, color = Color.Red, style = MaterialTheme.typography.bodyMedium) }
+        Text("Results", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+        Spacer(modifier = Modifier.height(8.dp))
+        if (results.isEmpty() && !isLoading && error == null) { Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text("No data to display", color = Color.Gray) } }
+        else {
+            LazyColumn(modifier = Modifier.fillMaxSize().background(Color.White).padding(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                items(results) { row ->
+                    Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(8.dp), elevation = CardDefaults.cardElevation(defaultElevation = 2.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
+                        Column(modifier = Modifier.padding(12.dp)) {
+                            row.forEach { (key, value) ->
+                                Row(modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp)) {
+                                    Text("$key: ", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary, modifier = Modifier.weight(1f))
+                                    Text(value, style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(2f))
+                                }
+                                if (row.keys.last() != key) { HorizontalDivider(color = Color.LightGray.copy(alpha = 0.3f)) }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun StatCard(label: String, value: String, icon: ImageVector, modifier: Modifier = Modifier) {
+    Card(modifier = modifier, elevation = CardDefaults.cardElevation(defaultElevation = 2.dp), colors = CardDefaults.cardColors(containerColor = Color.White)) {
+        Column(modifier = Modifier.padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+            Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(32.dp))
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(value, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+            Text(label, style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+        }
+    }
+}
+
+@Composable
+fun ActionItem(title: String, icon: ImageVector, onClick: () -> Unit) {
+    Row(modifier = Modifier.fillMaxWidth().clickable { onClick() }.padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+        Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.secondary, modifier = Modifier.size(24.dp))
+        Spacer(modifier = Modifier.width(16.dp))
+        Text(title, style = MaterialTheme.typography.bodyLarge)
+        Spacer(modifier = Modifier.weight(1f))
+        Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null, tint = Color.LightGray)
+    }
+}
+
+@Composable
+fun InfoLabel(label: String, value: String) {
+    Column {
+        Text(label, style = MaterialTheme.typography.labelSmall, color = Color.Gray)
+        Text(value, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
+    }
+}
+
+@Composable
+fun StudentListItem(student: Student, onClick: () -> Unit) {
+    Card(modifier = Modifier.fillMaxWidth().clickable { onClick() }, elevation = CardDefaults.cardElevation(defaultElevation = 2.dp), colors = CardDefaults.cardColors(containerColor = Color.White)) {
+        Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+            Box(modifier = Modifier.size(48.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primaryContainer), contentAlignment = Alignment.Center) {
+                Text(student.firstName.take(1) + student.lastName.take(1), color = MaterialTheme.colorScheme.onPrimaryContainer, fontWeight = FontWeight.Bold)
+            }
+            Spacer(modifier = Modifier.width(16.dp))
+            Column {
+                Text("${student.firstName} ${student.lastName}", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                Text(student.bannerNumber, style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+            }
+            Spacer(modifier = Modifier.weight(1f))
+            StatusBadge(student.status)
+        }
+    }
+}
+
+@Composable
+fun StatusBadge(status: String) {
+    val color = if (status == "placed") Color(0xFF4CAF50) else Color(0xFFFF9800)
+    Surface(color = color.copy(alpha = 0.1f), shape = CircleShape, border = androidx.compose.foundation.BorderStroke(1.dp, color)) {
+        Text(status.uppercase(), modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp), color = color, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
+    }
+}
+
+@Composable
+fun StudentDetailScreen(student: Student, onBack: () -> Unit) {
+    Scaffold(topBar = { @OptIn(ExperimentalMaterial3Api::class) TopAppBar(title = { Text("Profile Details") }, navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back") } }) }) { padding ->
         Column(modifier = Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState()).padding(16.dp)) {
             Box(modifier = Modifier.fillMaxWidth().padding(vertical = 24.dp), contentAlignment = Alignment.Center) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -657,19 +613,19 @@ fun StudentDetailScreen(student: Student, onBack: () -> Unit) {
                 }
             }
             DetailCard("General Information") {
-                DetailRow("Email", student.email)
-                DetailRow("Phone", student.mobileNumber)
-                DetailRow("Gender", student.gender)
-                DetailRow("Nationality", student.nationality)
+                DetailRow("Email", student.email ?: "")
+                DetailRow("Phone", student.mobileNumber ?: "")
+                DetailRow("Gender", student.gender ?: "")
+                DetailRow("Nationality", student.nationality ?: "")
             }
             Spacer(modifier = Modifier.height(16.dp))
             DetailCard("Academic Info") {
-                DetailRow("Major", student.major)
-                DetailRow("Category", student.category)
+                DetailRow("Major", student.major ?: "")
+                DetailRow("Category", student.category ?: "")
                 DetailRow("Status", student.status)
             }
             Spacer(modifier = Modifier.height(16.dp))
-            DetailCard("Address") { Text("${student.street}\n${student.city}\n${student.postcode}", style = MaterialTheme.typography.bodyLarge) }
+            DetailCard("Address") { Text("${student.street ?: ""}\n${student.city ?: ""}\n${student.postcode ?: ""}", style = MaterialTheme.typography.bodyLarge) }
         }
     }
 }

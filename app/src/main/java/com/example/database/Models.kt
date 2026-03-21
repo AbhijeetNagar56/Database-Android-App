@@ -141,3 +141,21 @@ data class QueryResponse(
     val results: List<Map<String, String>> = emptyList(),
     val error: String? = null
 )
+
+@Serializable
+data class LoginRequest(
+    val username: String,
+    val password: String
+)
+
+@Serializable
+data class LoginResponse(
+    val message: String? = null,
+    val error: String? = null
+)
+
+@Serializable
+data class PingResponse(
+    val status: String,
+    val timestamp: String
+)

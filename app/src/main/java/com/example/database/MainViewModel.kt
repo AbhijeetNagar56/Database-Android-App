@@ -6,6 +6,7 @@ import io.ktor.client.*
 import io.ktor.client.call.*
 import io.ktor.client.engine.okhttp.*
 import io.ktor.client.plugins.contentnegotiation.*
+import io.ktor.client.plugins.cookies.*
 import io.ktor.client.request.*
 import io.ktor.http.*
 import io.ktor.serialization.kotlinx.json.*
@@ -24,6 +25,7 @@ class MainViewModel : ViewModel() {
                 isLenient = true
             })
         }
+        install(HttpCookies)
     }
 
     private val _queryResults = MutableStateFlow<List<Map<String, String>>>(emptyList())
@@ -34,6 +36,9 @@ class MainViewModel : ViewModel() {
 
     private val _error = MutableStateFlow<String?>(null)
     val error: StateFlow<String?> = _error
+
+    private val _isReady = MutableStateFlow(false)
+    val isReady: StateFlow<Boolean> = _isReady
 
     // State flows for all 12 entities
     private val _students = MutableStateFlow<List<Student>>(emptyList())
@@ -72,6 +77,36 @@ class MainViewModel : ViewModel() {
     private val _kin = MutableStateFlow<List<NextOfKin>>(emptyList())
     val kin: StateFlow<List<NextOfKin>> = _kin
 
+    init {
+        performInitialSetup()
+    }
+
+    private fun performInitialSetup() {
+        viewModelScope.launch {
+            _isLoading.value = true
+            try {
+                // 1. Ping the server to wake it up
+                client.get("$baseUrl/ping")
+                
+                // 2. Perform login
+                val loginResponse = client.post("$baseUrl/login") {
+                    contentType(ContentType.Application.Json)
+                    setBody(LoginRequest("admin123", "abc!@123"))
+                }
+
+                if (loginResponse.status == HttpStatusCode.OK) {
+                    _isReady.value = true
+                } else {
+                    _error.value = "Login failed: ${loginResponse.status}"
+                }
+            } catch (e: Exception) {
+                _error.value = "Setup failed: ${e.localizedMessage}"
+            } finally {
+                _isLoading.value = false
+            }
+        }
+    }
+
     // On-demand fetch methods
     fun fetchStudents() = fetchData<List<Student>>("/students") { _students.value = it }
     fun fetchAdvisers() = fetchData<List<Adviser>>("/advisers") { _advisers.value = it }
@@ -87,6 +122,7 @@ class MainViewModel : ViewModel() {
     fun fetchKin() = fetchData<List<NextOfKin>>("/kin") { _kin.value = it }
 
     private inline fun <reified T> fetchData(endpoint: String, crossinline onSuccess: (T) -> Unit) {
+        if (!_isReady.value) return
         viewModelScope.launch {
             _isLoading.value = true
             _error.value = null
@@ -106,6 +142,7 @@ class MainViewModel : ViewModel() {
     }
 
     fun executeQuery(queryText: String) {
+        if (!_isReady.value) return
         viewModelScope.launch {
             _isLoading.value = true
             _error.value = null

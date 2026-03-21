@@ -42,6 +42,7 @@ import kotlinx.coroutines.launch
 
 sealed class Screen(val route: String, val title: String, val icon: ImageVector) {
     object Dashboard : Screen("dashboard", "Dashboard", Icons.Default.Home)
+    object Tables : Screen("tables", "Tables", Icons.Default.TableChart)
     object Students : Screen("students", "Students", Icons.Default.Person)
     object Halls : Screen("halls", "Halls", Icons.Default.LocationCity)
     object Staff : Screen("staff", "Staff", Icons.Default.Group)
@@ -82,79 +83,41 @@ fun StudentAppTheme(content: @Composable () -> Unit) {
 @Composable
 fun MainContainer() {
     val navController = rememberNavController()
-    val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
-    val scope = rememberCoroutineScope()
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route
     val viewModel: MainViewModel = viewModel()
 
-    val menuItems = listOf(
+    val bottomMenuItems = listOf(
         Screen.Dashboard,
-        Screen.Students,
-        Screen.Halls,
-        Screen.Staff,
-        Screen.Advisers,
-        Screen.Courses,
+        Screen.Tables,
         Screen.Reports,
         Screen.RandomQuery
     )
 
-    ModalNavigationDrawer(
-        drawerState = drawerState,
-        drawerContent = {
-            ModalDrawerSheet {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .background(MaterialTheme.colorScheme.primary)
-                        .padding(24.dp)
-                ) {
-                    Column {
-                        Icon(
-                            Icons.Default.HomeWork,
-                            contentDescription = null,
-                            tint = Color.White,
-                            modifier = Modifier.size(48.dp)
-                        )
-                        Spacer(modifier = Modifier.height(12.dp))
-                        Text(
-                            "University\nAccommodation",
-                            style = MaterialTheme.typography.titleLarge,
-                            color = Color.White,
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
-                }
-                Spacer(modifier = Modifier.height(8.dp))
-                menuItems.forEach { item ->
-                    NavigationDrawerItem(
-                        icon = { Icon(item.icon, contentDescription = null) },
-                        label = { Text(item.title) },
-                        selected = currentRoute == item.route,
-                        onClick = {
-                            scope.launch { drawerState.close() }
-                            navController.navigate(item.route) {
-                                popUpTo(navController.graph.startDestinationId)
-                                launchSingleTop = true
-                            }
-                        },
-                        modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding)
-                    )
-                }
-            }
-        }
-    ) {
-        Scaffold(
-            topBar = {
+    val allScreens = listOf(
+        Screen.Dashboard, Screen.Tables, Screen.Students, Screen.Halls,
+        Screen.Staff, Screen.Advisers, Screen.Courses, Screen.Reports, Screen.RandomQuery
+    )
+
+    Scaffold(
+        topBar = {
+            val showMainTopBar = currentRoute != null && 
+                                !currentRoute.startsWith("student_detail") && 
+                                !currentRoute.startsWith("report_detail")
+            
+            if (showMainTopBar) {
                 CenterAlignedTopAppBar(
                     title = {
-                        val title = menuItems.find { it.route == currentRoute }?.title 
-                            ?: if (currentRoute?.startsWith("report_detail") == true) "Report Result" else "Details"
+                        val title = allScreens.find { it.route == currentRoute }?.title 
+                            ?: "Details"
                         Text(title, fontWeight = FontWeight.Bold)
                     },
                     navigationIcon = {
-                        IconButton(onClick = { scope.launch { drawerState.open() } }) {
-                            Icon(Icons.Default.Menu, contentDescription = "Menu")
+                        val isBottomDest = bottomMenuItems.any { it.route == currentRoute }
+                        if (!isBottomDest) {
+                            IconButton(onClick = { navController.popBackStack() }) {
+                                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                            }
                         }
                     },
                     colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
@@ -164,42 +127,130 @@ fun MainContainer() {
                     )
                 )
             }
-        ) { padding ->
-            NavHost(
-                navController = navController,
-                startDestination = Screen.Dashboard.route,
-                modifier = Modifier
-                    .padding(padding)
-                    .background(MaterialTheme.colorScheme.surfaceVariant)
-            ) {
-                composable(Screen.Dashboard.route) { DashboardScreen(navController, viewModel) }
-                composable(Screen.Students.route) { StudentsScreen(navController, viewModel) }
-                composable(Screen.Halls.route) { HallsScreen(navController, viewModel) }
-                composable(Screen.Staff.route) { StaffScreen(navController, viewModel) }
-                composable(Screen.Advisers.route) { AdvisersScreen(viewModel) }
-                composable(Screen.Courses.route) { CoursesScreen(viewModel) }
-                composable(Screen.Reports.route) { ReportsScreen(navController) }
-                composable(Screen.RandomQuery.route) { RandomQueryScreen(viewModel) }
-                
-                composable(
-                    "student_detail/{bannerNumber}",
-                    arguments = listOf(navArgument("bannerNumber") { type = NavType.StringType })
-                ) { backStackEntry ->
-                    val banner = backStackEntry.arguments?.getString("bannerNumber")
-                    val students by viewModel.students.collectAsState()
-                    val student = students.find { it.bannerNumber == banner }
-                    student?.let {
-                        StudentDetailScreen(it, onBack = { navController.popBackStack() })
+        },
+        bottomBar = {
+            val showBottomBar = currentRoute != null && 
+                               !currentRoute.startsWith("student_detail") && 
+                               !currentRoute.startsWith("report_detail")
+            
+            if (showBottomBar) {
+                NavigationBar(
+                    containerColor = Color.White,
+                    tonalElevation = 8.dp
+                ) {
+                    bottomMenuItems.forEach { item ->
+                        val isSelected = currentRoute == item.route || 
+                                        (item == Screen.Tables && listOf("students", "halls", "staff", "advisers", "courses").contains(currentRoute))
+                        
+                        NavigationBarItem(
+                            icon = { Icon(item.icon, contentDescription = null) },
+                            label = { Text(item.title) },
+                            selected = isSelected,
+                            onClick = {
+                                navController.navigate(item.route) {
+                                    popUpTo(navController.graph.startDestinationId) {
+                                        saveState = true
+                                    }
+                                    launchSingleTop = true
+                                    restoreState = true
+                                }
+                            }
+                        )
                     }
                 }
+            }
+        }
+    ) { padding ->
+        NavHost(
+            navController = navController,
+            startDestination = Screen.Dashboard.route,
+            modifier = Modifier
+                .padding(padding)
+                .background(MaterialTheme.colorScheme.surfaceVariant)
+        ) {
+            composable(Screen.Dashboard.route) { DashboardScreen(navController, viewModel) }
+            composable(Screen.Tables.route) { TablesScreen(navController) }
+            composable(Screen.Students.route) { StudentsScreen(navController, viewModel) }
+            composable(Screen.Halls.route) { HallsScreen(navController, viewModel) }
+            composable(Screen.Staff.route) { StaffScreen(navController, viewModel) }
+            composable(Screen.Advisers.route) { AdvisersScreen(viewModel) }
+            composable(Screen.Courses.route) { CoursesScreen(viewModel) }
+            composable(Screen.Reports.route) { ReportsScreen(navController) }
+            composable(Screen.RandomQuery.route) { RandomQueryScreen(viewModel) }
+            
+            composable(
+                "student_detail/{bannerNumber}",
+                arguments = listOf(navArgument("bannerNumber") { type = NavType.StringType })
+            ) { backStackEntry ->
+                val banner = backStackEntry.arguments?.getString("bannerNumber")
+                val students by viewModel.students.collectAsState()
+                val student = students.find { it.bannerNumber == banner }
+                student?.let {
+                    StudentDetailScreen(it, onBack = { navController.popBackStack() })
+                }
+            }
 
-                composable(
-                    "report_detail/{reportTitle}",
-                    arguments = listOf(navArgument("reportTitle") { type = NavType.StringType })
-                ) { backStackEntry ->
-                    val encodedTitle = backStackEntry.arguments?.getString("reportTitle") ?: ""
-                    val title = Uri.decode(encodedTitle)
-                    ReportDetailScreen(title, viewModel, onBack = { navController.popBackStack() })
+            composable(
+                "report_detail/{reportTitle}",
+                arguments = listOf(navArgument("reportTitle") { type = NavType.StringType })
+            ) { backStackEntry ->
+                val encodedTitle = backStackEntry.arguments?.getString("reportTitle") ?: ""
+                val title = Uri.decode(encodedTitle)
+                ReportDetailScreen(title, viewModel, onBack = { navController.popBackStack() })
+            }
+        }
+    }
+}
+
+@Composable
+fun TablesScreen(navController: NavController) {
+    val tableItems = listOf(
+        Screen.Students,
+        Screen.Halls,
+        Screen.Staff,
+        Screen.Advisers,
+        Screen.Courses
+    )
+
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        item {
+            Text("Database Tables", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+            Spacer(modifier = Modifier.height(8.dp))
+        }
+        items(tableItems) { item ->
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { navController.navigate(item.route) },
+                colors = CardDefaults.cardColors(containerColor = Color.White),
+                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+            ) {
+                Row(
+                    modifier = Modifier.padding(20.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(40.dp)
+                            .clip(CircleShape)
+                            .background(MaterialTheme.colorScheme.primaryContainer),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(item.icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                    }
+                    Spacer(modifier = Modifier.width(16.dp))
+                    Text(item.title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Medium)
+                    Spacer(modifier = Modifier.weight(1f))
+                    Icon(
+                        Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                        contentDescription = null,
+                        modifier = Modifier.size(24.dp),
+                        tint = Color.LightGray
+                    )
                 }
             }
         }
@@ -321,7 +372,7 @@ fun HallsScreen(navController: NavController, viewModel: MainViewModel) {
                         Row {
                             InfoLabel("Phone", hall.telephone ?: "")
                             Spacer(modifier = Modifier.width(24.dp))
-                            InfoLabel("Manager ID", hall.managerStaffNumber ?: "")
+                            InfoLabel("Room", hall.managerStaffNumber ?: "")
                         }
                     }
                 }

@@ -4,6 +4,7 @@ import android.os.Bundle
 import android.net.Uri
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -12,6 +13,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -28,6 +30,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -41,6 +45,7 @@ import androidx.navigation.navArgument
 import kotlinx.coroutines.launch
 
 sealed class Screen(val route: String, val title: String, val icon: ImageVector) {
+    object Login : Screen("login", "Login", Icons.Default.Lock)
     object Dashboard : Screen("dashboard", "Dashboard", Icons.Default.Home)
     object Tables : Screen("tables", "Tables", Icons.Default.TableChart)
     object Students : Screen("students", "Students", Icons.Default.Person)
@@ -49,7 +54,7 @@ sealed class Screen(val route: String, val title: String, val icon: ImageVector)
     object Advisers : Screen("advisers", "Advisers", Icons.Default.SupportAgent)
     object Courses : Screen("courses", "Courses", Icons.Default.School)
     object Reports : Screen("reports", "Reports", Icons.AutoMirrored.Filled.List)
-    object RandomQuery : Screen("random_query", "SQL Console", Icons.Default.Terminal)
+    object RandomQuery : Screen("random_query", "Query", Icons.Default.Terminal)
 }
 
 class MainActivity : ComponentActivity() {
@@ -86,6 +91,7 @@ fun MainContainer() {
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route
     val viewModel: MainViewModel = viewModel()
+    val isReady by viewModel.isReady.collectAsState()
 
     val bottomMenuItems = listOf(
         Screen.Dashboard,
@@ -95,13 +101,14 @@ fun MainContainer() {
     )
 
     val allScreens = listOf(
-        Screen.Dashboard, Screen.Tables, Screen.Students, Screen.Halls,
+        Screen.Login, Screen.Dashboard, Screen.Tables, Screen.Students, Screen.Halls,
         Screen.Staff, Screen.Advisers, Screen.Courses, Screen.Reports, Screen.RandomQuery
     )
 
     Scaffold(
         topBar = {
             val showMainTopBar = currentRoute != null && 
+                                currentRoute != Screen.Login.route &&
                                 !currentRoute.startsWith("student_detail") && 
                                 !currentRoute.startsWith("report_detail")
             
@@ -130,6 +137,7 @@ fun MainContainer() {
         },
         bottomBar = {
             val showBottomBar = currentRoute != null && 
+                               currentRoute != Screen.Login.route &&
                                !currentRoute.startsWith("student_detail") && 
                                !currentRoute.startsWith("report_detail")
             
@@ -163,11 +171,18 @@ fun MainContainer() {
     ) { padding ->
         NavHost(
             navController = navController,
-            startDestination = Screen.Dashboard.route,
+            startDestination = Screen.Login.route,
             modifier = Modifier
                 .padding(padding)
                 .background(MaterialTheme.colorScheme.surfaceVariant)
         ) {
+            composable(Screen.Login.route) {
+                LoginScreen(viewModel, onLoginSuccess = {
+                    navController.navigate(Screen.Dashboard.route) {
+                        popUpTo(Screen.Login.route) { inclusive = true }
+                    }
+                })
+            }
             composable(Screen.Dashboard.route) { DashboardScreen(navController, viewModel) }
             composable(Screen.Tables.route) { TablesScreen(navController) }
             composable(Screen.Students.route) { StudentsScreen(navController, viewModel) }
@@ -197,6 +212,90 @@ fun MainContainer() {
                 val encodedTitle = backStackEntry.arguments?.getString("reportTitle") ?: ""
                 val title = Uri.decode(encodedTitle)
                 ReportDetailScreen(title, viewModel, onBack = { navController.popBackStack() })
+            }
+        }
+    }
+}
+
+@Composable
+fun LoginScreen(viewModel: MainViewModel, onLoginSuccess: () -> Unit) {
+    var username by remember { mutableStateOf("") }
+    var password by remember { mutableStateOf("") }
+    val isLoading by viewModel.isLoading.collectAsState()
+    val error by viewModel.error.collectAsState()
+    val isBackendAwake by viewModel.isBackendAwake.collectAsState()
+
+    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(32.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
+        ) {
+            Icon(
+                Icons.Default.HomeWork,
+                contentDescription = null,
+                modifier = Modifier.size(100.dp),
+                tint = MaterialTheme.colorScheme.primary
+            )
+            Spacer(modifier = Modifier.height(16.dp))
+            Text(
+                "University Database",
+                style = MaterialTheme.typography.headlineMedium,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.primary
+            )
+            Spacer(modifier = Modifier.height(32.dp))
+
+            if (!isBackendAwake) {
+                CircularProgressIndicator()
+                Spacer(modifier = Modifier.height(8.dp))
+                Text("Starting the server...", style = MaterialTheme.typography.bodyMedium)
+                if (error != null) {
+                    Text(error!!, color = Color.Red, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = 8.dp))
+                    Button(onClick = { viewModel.pingServer() }, modifier = Modifier.padding(top = 8.dp)) {
+                        Text("Retry Connection")
+                    }
+                }
+            } else {
+                OutlinedTextField(
+                    value = username,
+                    onValueChange = { username = it },
+                    label = { Text("Username") },
+                    modifier = Modifier.fillMaxWidth(),
+                    leadingIcon = { Icon(Icons.Default.Person, contentDescription = null) },
+                    singleLine = true
+                )
+                Spacer(modifier = Modifier.height(16.dp))
+                OutlinedTextField(
+                    value = password,
+                    onValueChange = { password = it },
+                    label = { Text("Password") },
+                    modifier = Modifier.fillMaxWidth(),
+                    leadingIcon = { Icon(Icons.Default.Lock, contentDescription = null) },
+                    visualTransformation = PasswordVisualTransformation(),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                    singleLine = true
+                )
+                Spacer(modifier = Modifier.height(24.dp))
+                Button(
+                    onClick = { viewModel.login(username, password) { if (it) onLoginSuccess() } },
+                    modifier = Modifier.fillMaxWidth().height(50.dp),
+                    enabled = !isLoading && username.isNotBlank() && password.isNotBlank()
+                ) {
+                    if (isLoading) CircularProgressIndicator(modifier = Modifier.size(24.dp), color = Color.White)
+                    else Text("Login")
+                }
+                
+                AnimatedVisibility(visible = error != null) {
+                    Text(
+                        text = error ?: "",
+                        color = Color.Red,
+                        style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier.padding(top = 16.dp)
+                    )
+                }
             }
         }
     }

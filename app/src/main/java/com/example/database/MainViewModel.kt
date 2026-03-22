@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import io.ktor.client.*
 import io.ktor.client.call.*
 import io.ktor.client.engine.okhttp.*
+import io.ktor.client.plugins.*
 import io.ktor.client.plugins.contentnegotiation.*
 import io.ktor.client.plugins.cookies.*
 import io.ktor.client.request.*
@@ -14,11 +15,19 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.*
+import java.util.concurrent.TimeUnit
 
 class MainViewModel : ViewModel() {
     private val baseUrl = "https://university-database.onrender.com"
 
     private val client = HttpClient(OkHttp) {
+        engine {
+            config {
+                connectTimeout(180, TimeUnit.SECONDS)
+                readTimeout(180, TimeUnit.SECONDS)
+                writeTimeout(180, TimeUnit.SECONDS)
+            }
+        }
         install(ContentNegotiation) {
             json(Json {
                 ignoreUnknownKeys = true
@@ -26,6 +35,11 @@ class MainViewModel : ViewModel() {
             })
         }
         install(HttpCookies)
+        install(HttpTimeout) {
+            requestTimeoutMillis = 180000 // 3 minutes for cold start
+            connectTimeoutMillis = 180000
+            socketTimeoutMillis = 180000
+        }
     }
 
     private val _queryResults = MutableStateFlow<List<Map<String, String>>>(emptyList())
@@ -39,6 +53,9 @@ class MainViewModel : ViewModel() {
 
     private val _isReady = MutableStateFlow(false)
     val isReady: StateFlow<Boolean> = _isReady
+    
+    private val _isBackendAwake = MutableStateFlow(false)
+    val isBackendAwake: StateFlow<Boolean> = _isBackendAwake
 
     // State flows for all 12 entities
     private val _students = MutableStateFlow<List<Student>>(emptyList())
@@ -78,29 +95,51 @@ class MainViewModel : ViewModel() {
     val kin: StateFlow<List<NextOfKin>> = _kin
 
     init {
-        performInitialSetup()
+        pingServer()
     }
 
-    private fun performInitialSetup() {
+    fun pingServer() {
         viewModelScope.launch {
             _isLoading.value = true
+            _error.value = null
             try {
-                // 1. Ping the server to wake it up
-                client.get("$baseUrl/ping")
-                
-                // 2. Perform login
+                // Request with a very long timeout for the initial wake-up
+                client.get("$baseUrl/ping") {
+                    timeout {
+                        requestTimeoutMillis = 180000
+                        connectTimeoutMillis = 180000
+                        socketTimeoutMillis = 180000
+                    }
+                }
+                _isBackendAwake.value = true
+            } catch (e: Exception) {
+                _error.value = "Server wake-up timed out. Please retry."
+            } finally {
+                _isLoading.value = false
+            }
+        }
+    }
+
+    fun login(username: String, password: String, onResult: (Boolean) -> Unit) {
+        viewModelScope.launch {
+            _isLoading.value = true
+            _error.value = null
+            try {
                 val loginResponse = client.post("$baseUrl/login") {
                     contentType(ContentType.Application.Json)
-                    setBody(LoginRequest("admin123", "abc!@123"))
+                    setBody(LoginRequest(username, password))
                 }
 
                 if (loginResponse.status == HttpStatusCode.OK) {
                     _isReady.value = true
+                    onResult(true)
                 } else {
-                    _error.value = "Login failed: ${loginResponse.status}"
+                    _error.value = "Invalid username or password"
+                    onResult(false)
                 }
             } catch (e: Exception) {
-                _error.value = "Setup failed: ${e.localizedMessage}"
+                _error.value = "Login failed: ${e.localizedMessage}"
+                onResult(false)
             } finally {
                 _isLoading.value = false
             }

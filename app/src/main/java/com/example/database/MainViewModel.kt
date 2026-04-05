@@ -23,9 +23,9 @@ class MainViewModel : ViewModel() {
     private val client = HttpClient(OkHttp) {
         engine {
             config {
-                connectTimeout(180, TimeUnit.SECONDS)
-                readTimeout(180, TimeUnit.SECONDS)
-                writeTimeout(180, TimeUnit.SECONDS)
+                connectTimeout(300, TimeUnit.SECONDS)
+                readTimeout(300, TimeUnit.SECONDS)
+                writeTimeout(300, TimeUnit.SECONDS)
             }
         }
         install(ContentNegotiation) {
@@ -36,9 +36,9 @@ class MainViewModel : ViewModel() {
         }
         install(HttpCookies)
         install(HttpTimeout) {
-            requestTimeoutMillis = 180000 // 3 minutes for cold start
-            connectTimeoutMillis = 180000
-            socketTimeoutMillis = 180000
+            requestTimeoutMillis = 300000 
+            connectTimeoutMillis = 300000
+            socketTimeoutMillis = 300000
         }
     }
 
@@ -57,7 +57,10 @@ class MainViewModel : ViewModel() {
     private val _isBackendAwake = MutableStateFlow(false)
     val isBackendAwake: StateFlow<Boolean> = _isBackendAwake
 
-    // State flows for all 12 entities
+    private val _detailResult = MutableStateFlow<Map<String, String>?>(null)
+    val detailResult: StateFlow<Map<String, String>?> = _detailResult
+
+    // State flows for all entities
     private val _students = MutableStateFlow<List<Student>>(emptyList())
     val students: StateFlow<List<Student>> = _students
 
@@ -94,6 +97,9 @@ class MainViewModel : ViewModel() {
     private val _kin = MutableStateFlow<List<NextOfKin>>(emptyList())
     val kin: StateFlow<List<NextOfKin>> = _kin
 
+    private val _places = MutableStateFlow<List<Place>>(emptyList())
+    val places: StateFlow<List<Place>> = _places
+
     init {
         pingServer()
     }
@@ -103,17 +109,15 @@ class MainViewModel : ViewModel() {
             _isLoading.value = true
             _error.value = null
             try {
-                // Request with a very long timeout for the initial wake-up
                 client.get("$baseUrl/ping") {
                     timeout {
-                        requestTimeoutMillis = 180000
-                        connectTimeoutMillis = 180000
-                        socketTimeoutMillis = 180000
+                        requestTimeoutMillis = 300000
+                        socketTimeoutMillis = 300000
                     }
                 }
                 _isBackendAwake.value = true
             } catch (e: Exception) {
-                _error.value = "Server wake-up timed out. Please retry."
+                _error.value = "Server is taking too long to start. Please retry."
             } finally {
                 _isLoading.value = false
             }
@@ -146,6 +150,53 @@ class MainViewModel : ViewModel() {
         }
     }
 
+    fun fetchReport(endpoint: String) {
+        if (!_isReady.value) return
+        viewModelScope.launch {
+            _isLoading.value = true
+            _error.value = null
+            _queryResults.value = emptyList()
+            try {
+                val response: JsonElement = client.get(baseUrl + endpoint).body()
+                
+                if (response is JsonArray) {
+                    val list = response.map { element ->
+                        element.jsonObject.mapValues { it.value.jsonPrimitive.contentOrNull ?: "null" }
+                    }
+                    _queryResults.value = list
+                } else if (response is JsonObject) {
+                    val map = response.mapValues { it.value.jsonPrimitive.contentOrNull ?: "null" }
+                    _queryResults.value = listOf(map)
+                }
+            } catch (e: Exception) {
+                _error.value = "Report Error: ${e.localizedMessage}"
+            } finally {
+                _isLoading.value = false
+            }
+        }
+    }
+
+    fun fetchEntityDetail(tableName: String, id: String) {
+        if (!_isReady.value) return
+        viewModelScope.launch {
+            _isLoading.value = true
+            _error.value = null
+            _detailResult.value = null
+            try {
+                val response: JsonElement = client.get("$baseUrl/$tableName/$id").body()
+                if (response is JsonObject) {
+                    _detailResult.value = response.mapValues { it.value.jsonPrimitive.contentOrNull ?: "null" }
+                } else if (response is JsonArray && response.isNotEmpty()) {
+                    _detailResult.value = response[0].jsonObject.mapValues { it.value.jsonPrimitive.contentOrNull ?: "null" }
+                }
+            } catch (e: Exception) {
+                _error.value = "Detail Error: ${e.localizedMessage}"
+            } finally {
+                _isLoading.value = false
+            }
+        }
+    }
+
     // On-demand fetch methods
     fun fetchStudents() = fetchData<List<Student>>("/students") { _students.value = it }
     fun fetchAdvisers() = fetchData<List<Adviser>>("/advisers") { _advisers.value = it }
@@ -159,6 +210,7 @@ class MainViewModel : ViewModel() {
     fun fetchInvoices() = fetchData<List<Invoice>>("/invoices") { _invoices.value = it }
     fun fetchInspections() = fetchData<List<Inspection>>("/inspections") { _inspections.value = it }
     fun fetchKin() = fetchData<List<NextOfKin>>("/kin") { _kin.value = it }
+    fun fetchPlaces() = fetchData<List<Place>>("/places") { _places.value = it }
 
     private inline fun <reified T> fetchData(endpoint: String, crossinline onSuccess: (T) -> Unit) {
         if (!_isReady.value) return

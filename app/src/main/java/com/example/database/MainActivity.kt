@@ -43,16 +43,27 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import kotlinx.coroutines.launch
+import java.util.Locale
 
-sealed class Screen(val route: String, val title: String, val icon: ImageVector) {
+sealed class Screen(val route: String, val title: String, val icon: ImageVector, val tableName: String? = null) {
     object Login : Screen("login", "Login", Icons.Default.Lock)
     object Dashboard : Screen("dashboard", "Dashboard", Icons.Default.Home)
     object Tables : Screen("tables", "Tables", Icons.Default.TableChart)
-    object Students : Screen("students", "Students", Icons.Default.Person)
-    object Halls : Screen("halls", "Halls", Icons.Default.LocationCity)
-    object Staff : Screen("staff", "Staff", Icons.Default.Group)
-    object Advisers : Screen("advisers", "Advisers", Icons.Default.SupportAgent)
-    object Courses : Screen("courses", "Courses", Icons.Default.School)
+    
+    object Students : Screen("students", "Students", Icons.Default.Person, "students")
+    object Halls : Screen("halls", "Halls", Icons.Default.LocationCity, "halls")
+    object Staff : Screen("staff", "Staff", Icons.Default.Group, "staff")
+    object Advisers : Screen("advisers", "Advisers", Icons.Default.SupportAgent, "advisers")
+    object Courses : Screen("courses", "Courses", Icons.Default.School, "courses")
+    object HallRooms : Screen("hallrooms", "Hall Rooms", Icons.Default.MeetingRoom, "hallrooms")
+    object Apartments : Screen("apartments", "Apartments", Icons.Default.Apartment, "apartments")
+    object ApartmentRooms : Screen("apartmentrooms", "Apartment Rooms", Icons.Default.Bed, "apartmentrooms")
+    object Leases : Screen("leases", "Leases", Icons.Default.Description, "leases")
+    object Invoices : Screen("invoices", "Invoices", Icons.Default.Receipt, "invoices")
+    object Inspections : Screen("inspections", "Inspections", Icons.AutoMirrored.Filled.FactCheck, "inspections")
+    object Kin : Screen("kin", "Next of Kin", Icons.Default.FamilyRestroom, "kin")
+    object Places : Screen("places", "Places", Icons.Default.Place, "places")
+    
     object Reports : Screen("reports", "Reports", Icons.AutoMirrored.Filled.List)
     object RandomQuery : Screen("random_query", "Query", Icons.Default.Terminal)
 }
@@ -91,7 +102,6 @@ fun MainContainer() {
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route
     val viewModel: MainViewModel = viewModel()
-    val isReady by viewModel.isReady.collectAsState()
 
     val bottomMenuItems = listOf(
         Screen.Dashboard,
@@ -100,23 +110,24 @@ fun MainContainer() {
         Screen.RandomQuery
     )
 
-    val allScreens = listOf(
-        Screen.Login, Screen.Dashboard, Screen.Tables, Screen.Students, Screen.Halls,
-        Screen.Staff, Screen.Advisers, Screen.Courses, Screen.Reports, Screen.RandomQuery
+    val tableScreens = listOf(
+        Screen.Students, Screen.Halls, Screen.Staff, Screen.Advisers, Screen.Courses,
+        Screen.HallRooms, Screen.Apartments, Screen.ApartmentRooms, Screen.Leases,
+        Screen.Invoices, Screen.Inspections, Screen.Kin, Screen.Places
     )
 
     Scaffold(
         topBar = {
             val showMainTopBar = currentRoute != null && 
                                 currentRoute != Screen.Login.route &&
-                                !currentRoute.startsWith("student_detail") && 
+                                !currentRoute.startsWith("detail/") && 
                                 !currentRoute.startsWith("report_detail")
             
             if (showMainTopBar) {
                 CenterAlignedTopAppBar(
                     title = {
-                        val title = allScreens.find { it.route == currentRoute }?.title 
-                            ?: "Details"
+                        val allScreens = listOf(Screen.Login, Screen.Dashboard, Screen.Tables, Screen.Reports, Screen.RandomQuery) + tableScreens
+                        val title = allScreens.find { it.route == currentRoute }?.title ?: "Details"
                         Text(title, fontWeight = FontWeight.Bold)
                     },
                     navigationIcon = {
@@ -138,7 +149,7 @@ fun MainContainer() {
         bottomBar = {
             val showBottomBar = currentRoute != null && 
                                currentRoute != Screen.Login.route &&
-                               !currentRoute.startsWith("student_detail") && 
+                               !currentRoute.startsWith("detail/") && 
                                !currentRoute.startsWith("report_detail")
             
             if (showBottomBar) {
@@ -148,7 +159,7 @@ fun MainContainer() {
                 ) {
                     bottomMenuItems.forEach { item ->
                         val isSelected = currentRoute == item.route || 
-                                        (item == Screen.Tables && listOf("students", "halls", "staff", "advisers", "courses").contains(currentRoute))
+                                        (item == Screen.Tables && tableScreens.any { it.route == currentRoute })
                         
                         NavigationBarItem(
                             icon = { Icon(item.icon, contentDescription = null) },
@@ -185,26 +196,28 @@ fun MainContainer() {
             }
             composable(Screen.Dashboard.route) { DashboardScreen(navController, viewModel) }
             composable(Screen.Tables.route) { TablesScreen(navController) }
-            composable(Screen.Students.route) { StudentsScreen(navController, viewModel) }
-            composable(Screen.Halls.route) { HallsScreen(navController, viewModel) }
-            composable(Screen.Staff.route) { StaffScreen(navController, viewModel) }
-            composable(Screen.Advisers.route) { AdvisersScreen(viewModel) }
-            composable(Screen.Courses.route) { CoursesScreen(viewModel) }
-            composable(Screen.Reports.route) { ReportsScreen(navController) }
-            composable(Screen.RandomQuery.route) { RandomQueryScreen(viewModel) }
             
-            composable(
-                "student_detail/{bannerNumber}",
-                arguments = listOf(navArgument("bannerNumber") { type = NavType.StringType })
-            ) { backStackEntry ->
-                val banner = backStackEntry.arguments?.getString("bannerNumber")
-                val students by viewModel.students.collectAsState()
-                val student = students.find { it.bannerNumber == banner }
-                student?.let {
-                    StudentDetailScreen(it, onBack = { navController.popBackStack() })
+            tableScreens.forEach { screen ->
+                composable(screen.route) {
+                    TableDataListScreen(screen, viewModel, navController)
                 }
             }
 
+            composable(
+                "detail/{tableName}/{id}",
+                arguments = listOf(
+                    navArgument("tableName") { type = NavType.StringType },
+                    navArgument("id") { type = NavType.StringType }
+                )
+            ) { backStackEntry ->
+                val tableName = backStackEntry.arguments?.getString("tableName") ?: ""
+                val id = backStackEntry.arguments?.getString("id") ?: ""
+                EntityDetailScreen(tableName, id, viewModel, onBack = { navController.popBackStack() })
+            }
+
+            composable(Screen.Reports.route) { ReportsScreen(navController) }
+            composable(Screen.RandomQuery.route) { RandomQueryScreen(viewModel) }
+            
             composable(
                 "report_detail/{reportTitle}",
                 arguments = listOf(navArgument("reportTitle") { type = NavType.StringType })
@@ -212,6 +225,171 @@ fun MainContainer() {
                 val encodedTitle = backStackEntry.arguments?.getString("reportTitle") ?: ""
                 val title = Uri.decode(encodedTitle)
                 ReportDetailScreen(title, viewModel, onBack = { navController.popBackStack() })
+            }
+        }
+    }
+}
+
+@Composable
+fun TableDataListScreen(screen: Screen, viewModel: MainViewModel, navController: NavController) {
+    val isLoading by viewModel.isLoading.collectAsState()
+    val error by viewModel.error.collectAsState()
+    
+    val dataFlow = when(screen) {
+        Screen.Students -> viewModel.students
+        Screen.Halls -> viewModel.halls
+        Screen.Staff -> viewModel.staff
+        Screen.Advisers -> viewModel.advisers
+        Screen.Courses -> viewModel.courses
+        Screen.HallRooms -> viewModel.hallRooms
+        Screen.Apartments -> viewModel.apartments
+        Screen.ApartmentRooms -> viewModel.apartmentRooms
+        Screen.Leases -> viewModel.leases
+        Screen.Invoices -> viewModel.invoices
+        Screen.Inspections -> viewModel.inspections
+        Screen.Kin -> viewModel.kin
+        Screen.Places -> viewModel.places
+        else -> null
+    }
+
+    LaunchedEffect(Unit) {
+        when(screen) {
+            Screen.Students -> viewModel.fetchStudents()
+            Screen.Halls -> viewModel.fetchHalls()
+            Screen.Staff -> viewModel.fetchStaff()
+            Screen.Advisers -> viewModel.fetchAdvisers()
+            Screen.Courses -> viewModel.fetchCourses()
+            Screen.HallRooms -> viewModel.fetchHallRooms()
+            Screen.Apartments -> viewModel.fetchApartments()
+            Screen.ApartmentRooms -> viewModel.fetchApartmentRooms()
+            Screen.Leases -> viewModel.fetchLeases()
+            Screen.Invoices -> viewModel.fetchInvoices()
+            Screen.Inspections -> viewModel.fetchInspections()
+            Screen.Kin -> viewModel.fetchKin()
+            Screen.Places -> viewModel.fetchPlaces()
+            else -> {}
+        }
+    }
+
+    val listData by dataFlow?.collectAsState() ?: remember { mutableStateOf(emptyList<Any>()) }
+
+    Box(modifier = Modifier.fillMaxSize()) {
+        if (isLoading && listData.isEmpty()) {
+            CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
+        } else {
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                items(listData) { item ->
+                    val (title, sub, id) = when(item) {
+                        is Student -> Triple("${item.firstName} ${item.lastName}", "Banner: ${item.bannerNumber}", item.bannerNumber)
+                        is Hall -> Triple(item.hallName, "ID: ${item.hallId}", item.hallId)
+                        is Staff -> Triple("${item.firstName} ${item.lastName}", "Staff ID: ${item.staffId}", item.staffId)
+                        is Adviser -> Triple(item.fullName, "ID: ${item.adviserId}", item.adviserId)
+                        is Course -> Triple(item.courseTitle, "Code: ${item.courseId}", item.courseId)
+                        is Room -> Triple("Room ${item.roomNumber}", "Place: ${item.placeNumber}", item.placeNumber)
+                        is Apartment -> Triple("Apartment ID: ${item.apartmentId}", "Bedrooms: ${item.numBedrooms}", item.apartmentId)
+                        is Lease -> Triple("Lease: ${item.leaseId}", "Student: ${item.bannerNumber}", item.leaseId)
+                        is Invoice -> Triple("Invoice: ${item.invoiceId}", "Lease: ${item.leaseId}", item.invoiceId)
+                        is Inspection -> Triple("Inspection: ${item.inspectionId}", "Date: ${item.date}", item.inspectionId)
+                        is NextOfKin -> Triple(item.name ?: "Unknown", "Kin ID: ${item.kinId}", item.kinId)
+                        is Place -> Triple("Place: ${item.placeNumber}", "Type: ${item.placeType}", item.placeNumber)
+                        else -> Triple("Unknown", "", "")
+                    }
+
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { 
+                                navController.navigate("detail/${screen.tableName}/$id")
+                            },
+                        colors = CardDefaults.cardColors(containerColor = Color.White),
+                        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+                    ) {
+                        Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Box(
+                                modifier = Modifier.size(48.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primaryContainer),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(title.take(1).uppercase(), fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onPrimaryContainer)
+                            }
+                            Spacer(modifier = Modifier.width(16.dp))
+                            Column {
+                                Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                                Text(sub, style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+                            }
+                            Spacer(modifier = Modifier.weight(1f))
+                            Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null, tint = Color.LightGray)
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun EntityDetailScreen(tableName: String, id: String, viewModel: MainViewModel, onBack: () -> Unit) {
+    val detail by viewModel.detailResult.collectAsState()
+    val isLoading by viewModel.isLoading.collectAsState()
+    val error by viewModel.error.collectAsState()
+
+    LaunchedEffect(tableName, id) {
+        viewModel.fetchEntityDetail(tableName, id)
+    }
+
+    Scaffold(
+        topBar = {
+            @OptIn(ExperimentalMaterial3Api::class)
+            TopAppBar(
+                title = { Text("${tableName.capitalize()} Details") },
+                navigationIcon = {
+                    IconButton(onClick = onBack) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                    }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.primary,
+                    titleContentColor = Color.White,
+                    navigationIconContentColor = Color.White
+                )
+            )
+        }
+    ) { padding ->
+        Box(modifier = Modifier.fillMaxSize().padding(padding).background(MaterialTheme.colorScheme.surfaceVariant)) {
+            if (isLoading) {
+                CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
+            } else if (error != null) {
+                Text(error!!, color = Color.Red, modifier = Modifier.align(Alignment.Center))
+            } else if (detail != null) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .verticalScroll(rememberScrollState())
+                        .padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = CardDefaults.cardColors(containerColor = Color.White),
+                        shape = RoundedCornerShape(16.dp)
+                    ) {
+                        Column(modifier = Modifier.padding(20.dp)) {
+                            detail!!.forEach { (key, value) ->
+                                val label = key.replace("_", " ").split(" ").joinToString(" ") { 
+                                    it.replaceFirstChar { char -> if (char.isLowerCase()) char.titlecase(Locale.ROOT) else it }
+                                }
+                                Column(modifier = Modifier.padding(vertical = 8.dp)) {
+                                    Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
+                                    Text(value, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
+                                    HorizontalDivider(modifier = Modifier.padding(top = 8.dp), thickness = 0.5.dp, color = Color.LightGray.copy(alpha = 0.5f))
+                                }
+                            }
+                        }
+                    }
+                }
             }
         }
     }
@@ -304,11 +482,9 @@ fun LoginScreen(viewModel: MainViewModel, onLoginSuccess: () -> Unit) {
 @Composable
 fun TablesScreen(navController: NavController) {
     val tableItems = listOf(
-        Screen.Students,
-        Screen.Halls,
-        Screen.Staff,
-        Screen.Advisers,
-        Screen.Courses
+        Screen.Students, Screen.Halls, Screen.Staff, Screen.Advisers, Screen.Courses,
+        Screen.HallRooms, Screen.Apartments, Screen.ApartmentRooms, Screen.Leases,
+        Screen.Invoices, Screen.Inspections, Screen.Kin, Screen.Places
     )
 
     LazyColumn(
@@ -410,161 +586,6 @@ fun DashboardScreen(navController: NavController, viewModel: MainViewModel) {
 }
 
 @Composable
-fun StudentsScreen(navController: NavController, viewModel: MainViewModel) {
-    val students by viewModel.students.collectAsState()
-    val isLoading by viewModel.isLoading.collectAsState()
-    var searchQuery by remember { mutableStateOf("") }
-    
-    LaunchedEffect(Unit) { viewModel.fetchStudents() }
-
-    val filteredStudents = students.filter { 
-        it.firstName.contains(searchQuery, ignoreCase = true) || 
-        it.lastName.contains(searchQuery, ignoreCase = true) ||
-        it.bannerNumber.contains(searchQuery)
-    }
-
-    Column(modifier = Modifier.fillMaxSize()) {
-        OutlinedTextField(
-            value = searchQuery,
-            onValueChange = { searchQuery = it },
-            modifier = Modifier.fillMaxWidth().padding(16.dp),
-            placeholder = { Text("Search Students...") },
-            leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
-            shape = CircleShape,
-            colors = TextFieldDefaults.colors(focusedContainerColor = Color.White, unfocusedContainerColor = Color.White)
-        )
-
-        if (isLoading && students.isEmpty()) {
-            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
-        } else {
-            LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                items(filteredStudents) { student ->
-                    StudentListItem(student) { navController.navigate("student_detail/${student.bannerNumber}") }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-fun HallsScreen(navController: NavController, viewModel: MainViewModel) {
-    val halls by viewModel.halls.collectAsState()
-    val isLoading by viewModel.isLoading.collectAsState()
-
-    LaunchedEffect(Unit) { viewModel.fetchHalls() }
-
-    if (isLoading && halls.isEmpty()) {
-        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
-    } else {
-        LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-            items(halls) { hall ->
-                Card(modifier = Modifier.fillMaxWidth(), elevation = CardDefaults.cardElevation(defaultElevation = 2.dp), colors = CardDefaults.cardColors(containerColor = Color.White)) {
-                    Column(modifier = Modifier.padding(16.dp)) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Default.LocationCity, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text(hall.name, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-                        }
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text(hall.address ?: "", style = MaterialTheme.typography.bodyMedium, color = Color.Gray)
-                        Spacer(modifier = Modifier.height(12.dp))
-                        Row {
-                            InfoLabel("Phone", hall.telephone ?: "")
-                            Spacer(modifier = Modifier.width(24.dp))
-                            InfoLabel("Room", hall.managerStaffNumber ?: "")
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-fun StaffScreen(navController: NavController, viewModel: MainViewModel) {
-    val staff by viewModel.staff.collectAsState()
-    val isLoading by viewModel.isLoading.collectAsState()
-
-    LaunchedEffect(Unit) { viewModel.fetchStaff() }
-
-    if (isLoading && staff.isEmpty()) {
-        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
-    } else {
-        LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            items(staff) { member ->
-                Card(modifier = Modifier.fillMaxWidth(), elevation = CardDefaults.cardElevation(defaultElevation = 2.dp), colors = CardDefaults.cardColors(containerColor = Color.White)) {
-                    Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.AccountCircle, contentDescription = null, modifier = Modifier.size(40.dp), tint = MaterialTheme.colorScheme.primary)
-                        Spacer(modifier = Modifier.width(16.dp))
-                        Column {
-                            Text("${member.firstName} ${member.lastName}", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                            Text(member.position ?: "", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.secondary)
-                            Text(member.location ?: "", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-fun AdvisersScreen(viewModel: MainViewModel) {
-    val advisers by viewModel.advisers.collectAsState()
-    val isLoading by viewModel.isLoading.collectAsState()
-
-    LaunchedEffect(Unit) { viewModel.fetchAdvisers() }
-
-    if (isLoading && advisers.isEmpty()) {
-        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
-    } else {
-        LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            items(advisers) { adviser ->
-                Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = Color.White)) {
-                    Column(modifier = Modifier.padding(16.dp)) {
-                        Text(adviser.fullName, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                        Text(adviser.position ?: "", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
-                        Text(adviser.department ?: "", style = MaterialTheme.typography.bodySmall)
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Row {
-                            InfoLabel("Phone", adviser.internalPhone ?: "")
-                            Spacer(modifier = Modifier.width(24.dp))
-                            InfoLabel("Room", adviser.roomNumber ?: "")
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-fun CoursesScreen(viewModel: MainViewModel) {
-    val courses by viewModel.courses.collectAsState()
-    val isLoading by viewModel.isLoading.collectAsState()
-
-    LaunchedEffect(Unit) { viewModel.fetchCourses() }
-
-    if (isLoading && courses.isEmpty()) {
-        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
-    } else {
-        LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            items(courses) { course ->
-                Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = Color.White)) {
-                    Column(modifier = Modifier.padding(16.dp)) {
-                        Text(course.courseTitle, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                        Text(course.courseNumber, style = MaterialTheme.typography.bodySmall, color = Color.Gray)
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text("Instructor: ${course.instructorName ?: ""}", style = MaterialTheme.typography.bodyMedium)
-                        Text("Dept: ${course.departmentName ?: ""}", style = MaterialTheme.typography.bodySmall)
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
 fun ReportsScreen(navController: NavController) {
     val reports = listOf(
         "Hall Managers Report" to Icons.Default.SupervisorAccount,
@@ -577,7 +598,10 @@ fun ReportsScreen(navController: NavController) {
         "Student Category Stats" to Icons.Default.PieChart,
         "Next-of-Kin Missing" to Icons.Default.NoAccounts,
         "Student Adviser Info" to Icons.Default.SupportAgent,
-        "Senior Staff List" to Icons.Default.Face
+        "Senior Staff List" to Icons.Default.Face,
+        "Total Rent Paid" to Icons.Default.AttachMoney,
+        "Hall Rent Statistics" to Icons.Default.BarChart,
+        "Hall Place Capacity" to Icons.Default.Numbers
     )
 
     LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -606,21 +630,29 @@ fun ReportDetailScreen(reportTitle: String, viewModel: MainViewModel, onBack: ()
     val error by viewModel.error.collectAsState()
 
     LaunchedEffect(reportTitle) {
-        val query = when (reportTitle) {
-            "Hall Managers Report" -> "SELECT * FROM Staff WHERE position LIKE '%Manager%'"
-            "Student Lease Agreements" -> "SELECT * FROM Leases"
-            "Summer Semester Leases" -> "SELECT * FROM Leases WHERE includes_summer = 1"
-            "Unpaid Invoices List" -> "SELECT * FROM Invoices WHERE date_paid IS NULL"
-            "Apartment Inspections" -> "SELECT * FROM Inspections"
-            "Hall Occupancy" -> "SELECT hall_name, COUNT(*) as Occupants FROM Leases GROUP BY hall_name"
-            "Waiting List Details" -> "SELECT * FROM Students WHERE status = 'waiting'"
-            "Student Category Stats" -> "SELECT category, COUNT(*) as Count FROM Students GROUP BY category"
-            "Next-of-Kin Missing" -> "SELECT banner_number, first_name, last_name FROM Students WHERE banner_number NOT IN (SELECT banner_number FROM Kin)"
-            "Student Adviser Info" -> "SELECT s.first_name, s.last_name, a.full_name as Adviser FROM Students s JOIN Advisers a ON s.adviser_staff_number = a.staff_number"
-            "Senior Staff List" -> "SELECT * FROM Staff WHERE position LIKE '%Senior%'"
-            else -> "SELECT * FROM Students LIMIT 10"
+        val endpoint = when (reportTitle) {
+            "Hall Managers Report" -> "/reports/hall-managers"
+            "Student Lease Agreements" -> "/reports/students-leases"
+            "Summer Semester Leases" -> "/reports/summer-leases"
+            "Unpaid Invoices List" -> "/reports/unpaid-invoices"
+            "Apartment Inspections" -> "/reports/unsatisfactory-inspections"
+            "Hall Occupancy" -> "/reports/hall-students/1" // Example hallId
+            "Waiting List Details" -> "/reports/waiting-list"
+            "Student Category Stats" -> "/reports/student-category-count"
+            "Next-of-Kin Missing" -> "/reports/students-without-kin"
+            "Student Adviser Info" -> "/reports/student-adviser/1" // Example bannerNumber
+            "Senior Staff List" -> "/reports/senior-staff"
+            "Total Rent Paid" -> "/reports/student-rent/1" // Example bannerNumber
+            "Hall Rent Statistics" -> "/reports/hall-rent-stats"
+            "Hall Place Capacity" -> "/reports/hall-place-count"
+            else -> null
         }
-        viewModel.executeQuery(query)
+        
+        if (endpoint != null) {
+            viewModel.fetchReport(endpoint)
+        } else {
+            viewModel.executeQuery("SELECT * FROM Students LIMIT 10")
+        }
     }
 
     Column(modifier = Modifier.fillMaxSize().background(Color.White)) {
@@ -764,7 +796,7 @@ fun StudentDetailScreen(student: Student, onBack: () -> Unit) {
             }
             DetailCard("General Information") {
                 DetailRow("Email", student.email ?: "")
-                DetailRow("Phone", student.mobileNumber ?: "")
+                DetailRow("Phone", student.mobilePhone ?: "")
                 DetailRow("Gender", student.gender ?: "")
                 DetailRow("Nationality", student.nationality ?: "")
             }

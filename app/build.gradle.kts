@@ -63,6 +63,9 @@ dependencies {
     implementation(libs.ktor.client.content.negotiation)
     implementation(libs.ktor.serialization.kotlinx.json)
     implementation(libs.kotlinx.serialization.json)
+    
+    // Kotlin Reflect for dynamic table display
+    implementation(kotlin("reflect"))
 
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)

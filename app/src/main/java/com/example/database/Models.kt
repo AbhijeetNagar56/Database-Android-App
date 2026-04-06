@@ -53,7 +53,7 @@ data class Room(
     @SerialName("place_number") val placeNumber: String = "",
     @SerialName("hall_id") val hallId: String? = null,
     @SerialName("room_number") val roomNumber: String = "",
-    @SerialName("monthly_rent") val monthlyRent: Double = 0.0,
+    @SerialName("monthly_rent") val monthlyRent: String? = null,
     @SerialName("apartment_id") val apartmentId: String? = null
 )
 
@@ -63,7 +63,7 @@ data class Apartment(
     val street: String? = null,
     val city: String? = null,
     val postcode: String? = null,
-    @SerialName("num_bedrooms") val numBedrooms: Int? = null
+    @SerialName("num_bedrooms") val numBedrooms: String? = null
 )
 
 @Serializable
@@ -71,7 +71,7 @@ data class Lease(
     @SerialName("lease_id") val leaseId: String = "",
     @SerialName("banner_number") val bannerNumber: String = "",
     @SerialName("place_number") val placeNumber: String? = null,
-    @SerialName("lease_duration_semesters") val duration: Int? = null,
+    @SerialName("lease_duration_semesters") val duration: String? = null,
     @SerialName("start_date") val startDate: String? = null,
     @SerialName("end_date") val endDate: String? = null,
     val address: String? = null,
@@ -82,8 +82,8 @@ data class Lease(
 data class Invoice(
     @SerialName("invoice_id") val invoiceId: String = "",
     @SerialName("lease_id") val leaseId: String = "",
-    val semester: Int? = null,
-    @SerialName("payment_due") val paymentDue: Double? = null,
+    val semester: String? = null,
+    @SerialName("payment_due") val paymentDue: String? = null,
     @SerialName("banner_number") val bannerNumber: String? = null,
     @SerialName("place_number") val placeNumber: String? = null,
     @SerialName("room_number") val roomNumber: String? = null,
@@ -100,7 +100,7 @@ data class Inspection(
     @SerialName("apartment_id") val apartmentId: String? = null,
     @SerialName("staff_id") val staffId: String? = null,
     @SerialName("inspection_date") val date: String? = null,
-    val satisfactory: String? = "Yes",
+    val satisfactory: String? = null,
     val comments: String? = null
 )
 
@@ -123,7 +123,7 @@ data class Staff(
 data class Course(
     @SerialName("course_id") val courseId: String = "",
     @SerialName("course_title") val courseTitle: String = "",
-    @SerialName("course_year") val courseYear: Int? = null,
+    @SerialName("course_year") val courseYear: String? = null,
     @SerialName("instructor_name") val instructorName: String? = null,
     @SerialName("instructor_phone") val instructorPhone: String? = null,
     @SerialName("instructor_email") val instructorEmail: String? = null,

@@ -121,7 +121,9 @@ fun MainContainer() {
             val showMainTopBar = currentRoute != null && 
                                 currentRoute != Screen.Login.route &&
                                 !currentRoute.startsWith("detail/") && 
-                                !currentRoute.startsWith("report_detail")
+                                !currentRoute.startsWith("report_detail") &&
+                                !currentRoute.startsWith("select_student") &&
+                                !currentRoute.startsWith("select_hall")
             
             if (showMainTopBar) {
                 CenterAlignedTopAppBar(
@@ -150,7 +152,9 @@ fun MainContainer() {
             val showBottomBar = currentRoute != null && 
                                currentRoute != Screen.Login.route &&
                                !currentRoute.startsWith("detail/") && 
-                               !currentRoute.startsWith("report_detail")
+                               !currentRoute.startsWith("report_detail") &&
+                               !currentRoute.startsWith("select_student") &&
+                               !currentRoute.startsWith("select_hall")
             
             if (showBottomBar) {
                 NavigationBar(
@@ -219,12 +223,169 @@ fun MainContainer() {
             composable(Screen.RandomQuery.route) { RandomQueryScreen(viewModel) }
             
             composable(
-                "report_detail/{reportTitle}",
-                arguments = listOf(navArgument("reportTitle") { type = NavType.StringType })
+                "report_detail/{reportTitle}?id={id}",
+                arguments = listOf(
+                    navArgument("reportTitle") { type = NavType.StringType },
+                    navArgument("id") { type = NavType.StringType; nullable = true; defaultValue = null }
+                )
             ) { backStackEntry ->
                 val encodedTitle = backStackEntry.arguments?.getString("reportTitle") ?: ""
                 val title = Uri.decode(encodedTitle)
-                ReportDetailScreen(title, viewModel, onBack = { navController.popBackStack() })
+                val id = backStackEntry.arguments?.getString("id")
+                ReportDetailScreen(title, id, viewModel, onBack = { navController.popBackStack() })
+            }
+
+            composable(
+                "select_student/{reportTitle}",
+                arguments = listOf(navArgument("reportTitle") { type = NavType.StringType })
+            ) { backStackEntry ->
+                val title = Uri.decode(backStackEntry.arguments?.getString("reportTitle") ?: "")
+                SelectStudentForReportScreen(title, viewModel, navController)
+            }
+
+            composable(
+                "select_hall/{reportTitle}",
+                arguments = listOf(navArgument("reportTitle") { type = NavType.StringType })
+            ) { backStackEntry ->
+                val title = Uri.decode(backStackEntry.arguments?.getString("reportTitle") ?: "")
+                SelectHallForReportScreen(title, viewModel, navController)
+            }
+        }
+    }
+}
+
+@Composable
+fun SelectStudentForReportScreen(reportTitle: String, viewModel: MainViewModel, navController: NavController) {
+    val students by viewModel.students.collectAsState()
+    val isLoading by viewModel.isLoading.collectAsState()
+    var searchQuery by remember { mutableStateOf("") }
+    
+    LaunchedEffect(Unit) { viewModel.fetchStudents() }
+
+    val filteredStudents = students.filter { 
+        it.firstName.contains(searchQuery, ignoreCase = true) || 
+        it.lastName.contains(searchQuery, ignoreCase = true) ||
+        it.bannerNumber.contains(searchQuery)
+    }
+
+    Scaffold(
+        topBar = {
+            @OptIn(ExperimentalMaterial3Api::class)
+            TopAppBar(
+                title = { Text("Select Student") },
+                navigationIcon = {
+                    IconButton(onClick = { navController.popBackStack() }) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                    }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.primary,
+                    titleContentColor = Color.White,
+                    navigationIconContentColor = Color.White
+                )
+            )
+        }
+    ) { padding ->
+        Column(modifier = Modifier.fillMaxSize().padding(padding)) {
+            Text(
+                text = "Select a student for report: $reportTitle",
+                modifier = Modifier.padding(16.dp),
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.primary
+            )
+            
+            OutlinedTextField(
+                value = searchQuery,
+                onValueChange = { searchQuery = it },
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                placeholder = { Text("Search Students...") },
+                leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
+                shape = CircleShape
+            )
+
+            if (isLoading && students.isEmpty()) {
+                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
+            } else {
+                LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    items(filteredStudents) { student ->
+                        Card(
+                            modifier = Modifier.fillMaxWidth().clickable { 
+                                navController.navigate("report_detail/${Uri.encode(reportTitle)}?id=${student.bannerNumber}")
+                            },
+                            colors = CardDefaults.cardColors(containerColor = Color.White),
+                            elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+                        ) {
+                            Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                                Box(modifier = Modifier.size(40.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primaryContainer), contentAlignment = Alignment.Center) {
+                                    Text(student.firstName.take(1).uppercase(), fontWeight = FontWeight.Bold)
+                                }
+                                Spacer(modifier = Modifier.width(16.dp))
+                                Column {
+                                    Text("${student.firstName} ${student.lastName}", fontWeight = FontWeight.Bold)
+                                    Text("Banner: ${student.bannerNumber}", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun SelectHallForReportScreen(reportTitle: String, viewModel: MainViewModel, navController: NavController) {
+    val halls by viewModel.halls.collectAsState()
+    val isLoading by viewModel.isLoading.collectAsState()
+
+    LaunchedEffect(Unit) { viewModel.fetchHalls() }
+
+    Scaffold(
+        topBar = {
+            @OptIn(ExperimentalMaterial3Api::class)
+            TopAppBar(
+                title = { Text("Select Hall") },
+                navigationIcon = {
+                    IconButton(onClick = { navController.popBackStack() }) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                    }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.primary,
+                    titleContentColor = Color.White,
+                    navigationIconContentColor = Color.White
+                )
+            )
+        }
+    ) { padding ->
+        Column(modifier = Modifier.fillMaxSize().padding(padding)) {
+            Text(
+                text = "Select a hall for report: $reportTitle",
+                modifier = Modifier.padding(16.dp),
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.primary
+            )
+
+            if (isLoading && halls.isEmpty()) {
+                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
+            } else {
+                LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    items(halls) { hall ->
+                        Card(
+                            modifier = Modifier.fillMaxWidth().clickable { 
+                                navController.navigate("report_detail/${Uri.encode(reportTitle)}?id=${hall.hallId}")
+                            },
+                            colors = CardDefaults.cardColors(containerColor = Color.White),
+                            elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+                        ) {
+                            Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                                Icon(Icons.Default.LocationCity, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                                Spacer(modifier = Modifier.width(16.dp))
+                                Text(hall.hallName, fontWeight = FontWeight.Bold)
+                            }
+                        }
+                    }
+                }
             }
         }
     }
@@ -587,6 +748,9 @@ fun DashboardScreen(navController: NavController, viewModel: MainViewModel) {
 
 @Composable
 fun ReportsScreen(navController: NavController) {
+    val reportsNeedingStudent = listOf("Total Rent Paid", "Student Adviser Info")
+    val reportsNeedingHall = listOf("Hall Occupancy")
+
     val reports = listOf(
         "Hall Managers Report" to Icons.Default.SupervisorAccount,
         "Student Lease Agreements" to Icons.Default.Description,
@@ -607,7 +771,15 @@ fun ReportsScreen(navController: NavController) {
     LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         items(reports) { (title, icon) ->
             Card(
-                modifier = Modifier.fillMaxWidth().clickable { navController.navigate("report_detail/${Uri.encode(title)}") },
+                modifier = Modifier.fillMaxWidth().clickable { 
+                    if (reportsNeedingStudent.contains(title)) {
+                        navController.navigate("select_student/${Uri.encode(title)}")
+                    } else if (reportsNeedingHall.contains(title)) {
+                        navController.navigate("select_hall/${Uri.encode(title)}")
+                    } else {
+                        navController.navigate("report_detail/${Uri.encode(title)}")
+                    }
+                },
                 colors = CardDefaults.cardColors(containerColor = Color.White),
                 elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
             ) {
@@ -624,25 +796,25 @@ fun ReportsScreen(navController: NavController) {
 }
 
 @Composable
-fun ReportDetailScreen(reportTitle: String, viewModel: MainViewModel, onBack: () -> Unit) {
+fun ReportDetailScreen(reportTitle: String, id: String?, viewModel: MainViewModel, onBack: () -> Unit) {
     val results by viewModel.queryResults.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
     val error by viewModel.error.collectAsState()
 
-    LaunchedEffect(reportTitle) {
+    LaunchedEffect(reportTitle, id) {
         val endpoint = when (reportTitle) {
             "Hall Managers Report" -> "/reports/hall-managers"
             "Student Lease Agreements" -> "/reports/students-leases"
             "Summer Semester Leases" -> "/reports/summer-leases"
             "Unpaid Invoices List" -> "/reports/unpaid-invoices"
             "Apartment Inspections" -> "/reports/unsatisfactory-inspections"
-            "Hall Occupancy" -> "/reports/hall-students/1" // Example hallId
+            "Hall Occupancy" -> if (id != null) "/reports/hall-students/$id" else null
             "Waiting List Details" -> "/reports/waiting-list"
             "Student Category Stats" -> "/reports/student-category-count"
             "Next-of-Kin Missing" -> "/reports/students-without-kin"
-            "Student Adviser Info" -> "/reports/student-adviser/1" // Example bannerNumber
+            "Student Adviser Info" -> if (id != null) "/reports/student-adviser/$id" else null
             "Senior Staff List" -> "/reports/senior-staff"
-            "Total Rent Paid" -> "/reports/student-rent/1" // Example bannerNumber
+            "Total Rent Paid" -> if (id != null) "/reports/student-rent/$id" else null
             "Hall Rent Statistics" -> "/reports/hall-rent-stats"
             "Hall Place Capacity" -> "/reports/hall-place-count"
             else -> null
@@ -650,32 +822,53 @@ fun ReportDetailScreen(reportTitle: String, viewModel: MainViewModel, onBack: ()
         
         if (endpoint != null) {
             viewModel.fetchReport(endpoint)
+        } else if (id == null && (reportTitle == "Total Rent Paid" || reportTitle == "Hall Occupancy" || reportTitle == "Student Adviser Info")) {
+            // Should have been handled by navigation, but show error just in case
         } else {
             viewModel.executeQuery("SELECT * FROM Students LIMIT 10")
         }
     }
 
-    Column(modifier = Modifier.fillMaxSize().background(Color.White)) {
-        Row(modifier = Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back") }
-            Text(reportTitle, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+    Scaffold(
+        topBar = {
+            @OptIn(ExperimentalMaterial3Api::class)
+            TopAppBar(
+                title = { Text(reportTitle) },
+                navigationIcon = {
+                    IconButton(onClick = onBack) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                    }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.primary,
+                    titleContentColor = Color.White,
+                    navigationIconContentColor = Color.White
+                )
+            )
         }
-
-        if (isLoading) {
-            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
-        } else if (error != null) {
-            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text(error!!, color = Color.Red, modifier = Modifier.padding(16.dp)) }
-        } else {
-            LazyColumn(modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(8.dp), contentPadding = PaddingValues(bottom = 16.dp)) {
-                items(results) { row ->
-                    Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(8.dp), elevation = CardDefaults.cardElevation(defaultElevation = 2.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
-                        Column(modifier = Modifier.padding(12.dp)) {
-                            row.forEach { (key, value) ->
-                                Row(modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp)) {
-                                    Text("$key: ", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary, modifier = Modifier.weight(1f))
-                                    Text(value, style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(2f))
+    ) { padding ->
+        Column(modifier = Modifier.fillMaxSize().padding(padding).background(Color.White)) {
+            if (isLoading) {
+                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
+            } else if (error != null) {
+                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text(error!!, color = Color.Red, modifier = Modifier.padding(16.dp)) }
+            } else if (results.isEmpty()) {
+                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text("No data found for this report.") }
+            } else {
+                LazyColumn(modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(8.dp), contentPadding = PaddingValues(bottom = 16.dp, top = 16.dp)) {
+                    items(results) { row ->
+                        Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(8.dp), elevation = CardDefaults.cardElevation(defaultElevation = 2.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
+                            Column(modifier = Modifier.padding(12.dp)) {
+                                row.forEach { (key, value) ->
+                                    Row(modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp)) {
+                                        val label = key.replace("_", " ").split(" ").joinToString(" ") { 
+                                            it.replaceFirstChar { char -> if (char.isLowerCase()) char.titlecase(Locale.ROOT) else it }
+                                        }
+                                        Text("$label: ", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary, modifier = Modifier.weight(1f))
+                                        Text(value, style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(2f))
+                                    }
+                                    if (row.keys.last() != key) { HorizontalDivider(color = Color.LightGray.copy(alpha = 0.3f)) }
                                 }
-                                if (row.keys.last() != key) { HorizontalDivider(color = Color.LightGray.copy(alpha = 0.3f)) }
                             }
                         }
                     }
@@ -710,7 +903,10 @@ fun RandomQueryScreen(viewModel: MainViewModel) {
                         Column(modifier = Modifier.padding(12.dp)) {
                             row.forEach { (key, value) ->
                                 Row(modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp)) {
-                                    Text("$key: ", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary, modifier = Modifier.weight(1f))
+                                    val label = key.replace("_", " ").split(" ").joinToString(" ") { 
+                                        it.replaceFirstChar { char -> if (char.isLowerCase()) char.titlecase(Locale.ROOT) else it }
+                                    }
+                                    Text("$label: ", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary, modifier = Modifier.weight(1f))
                                     Text(value, style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(2f))
                                 }
                                 if (row.keys.last() != key) { HorizontalDivider(color = Color.LightGray.copy(alpha = 0.3f)) }
@@ -782,7 +978,7 @@ fun StatusBadge(status: String) {
 
 @Composable
 fun StudentDetailScreen(student: Student, onBack: () -> Unit) {
-    Scaffold(topBar = { @OptIn(ExperimentalMaterial3Api::class) TopAppBar(title = { Text("Profile Details") }, navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back") } }) }) { padding ->
+    Scaffold(topBar = { @OptIn(ExperimentalMaterial3Api::class) TopAppBar(title = { Text("Profile Details") }, navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back") } }, colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.primary, titleContentColor = Color.White, navigationIconContentColor = Color.White)) }) { padding ->
         Column(modifier = Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState()).padding(16.dp)) {
             Box(modifier = Modifier.fillMaxWidth().padding(vertical = 24.dp), contentAlignment = Alignment.Center) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
